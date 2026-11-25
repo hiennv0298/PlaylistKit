@@ -12,3 +12,4 @@ build-log.txt
 *.wav
 *.mp3
 *.m4a
+!docs/*.mp4
