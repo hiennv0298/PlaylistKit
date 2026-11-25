@@ -40,8 +40,11 @@ if ($DownloadFfmpeg) {
     $name = "ffmpeg-master-latest-win64-gpl.zip"
     $zip = Join-Path $env:TEMP "playlistkit-ffmpeg.zip"
     Invoke-WebRequest "$rel/$name" -OutFile $zip -UseBasicParsing
-    $sums = (Invoke-WebRequest "$rel/checksums.sha256" -UseBasicParsing).Content
-    $line = ($sums -split "`n") | Where-Object { $_ -match [regex]::Escape($name) } | Select-Object -First 1
+    # served as application/octet-stream, so save it to a file and read it as text
+    $sumsFile = Join-Path $env:TEMP "playlistkit-ffmpeg-checksums.txt"
+    Invoke-WebRequest "$rel/checksums.sha256" -OutFile $sumsFile -UseBasicParsing
+    $line = Get-Content $sumsFile | Where-Object { $_.Trim().EndsWith("  $name") } | Select-Object -First 1
+    Remove-Item $sumsFile -ErrorAction SilentlyContinue
     if (-not $line) { throw "no checksum for $name" }
     $expected = ($line.Trim() -split "\s+")[0].ToLower()
     $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
