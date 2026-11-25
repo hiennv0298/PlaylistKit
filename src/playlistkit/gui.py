@@ -755,6 +755,9 @@ def open_window(url: str) -> None:
     if exe:
         extra = os.environ.get("PLAYLISTKIT_BROWSER_ARGS", "").split()
         subprocess.Popen([exe, f"--app={url}", "--window-size=1300,920", *extra])
+        from playlistkit.winapp import tag_window_later
+
+        tag_window_later()  # own taskbar button instead of being grouped with other Edge app windows
     else:
         webbrowser.open(url)
 

@@ -3,6 +3,11 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.1.3
+
+- **Own taskbar button.** PlaylistKit's window is no longer grouped with ClipKit or other Edge app windows; it gets its own taskbar button and icon, and *Pin to taskbar* pins PlaylistKit itself.
+- New demo video in the README: one playlist from start to finish (pick a genre, find 3 songs, check, remix, YouTube text, MP4, Content ID cut).
+
 ## 0.1.2
 
 - **New app icon**, drawn separately for every size so it stays sharp in the taskbar, title bar, Start menu and desktop.

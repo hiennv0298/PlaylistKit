@@ -2,7 +2,7 @@
 ; Installs per user (no admin) into %LOCALAPPDATA%\Programs\PlaylistKit.
 
 #ifndef AppVersion
-  #define AppVersion "0.1.2"
+  #define AppVersion "0.1.3"
 #endif
 
 [Setup]
@@ -37,8 +37,8 @@ Name: "addtopath"; Description: "Add PlaylistKit to PATH (lets you type 'playlis
 Source: "..\dist\PlaylistKit\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\PlaylistKit"; Filename: "{app}\PlaylistKitApp.exe"
-Name: "{autodesktop}\PlaylistKit"; Filename: "{app}\PlaylistKitApp.exe"; Tasks: desktopicon
+Name: "{autoprograms}\PlaylistKit"; Filename: "{app}\PlaylistKitApp.exe"; AppUserModelID: "hiennv0298.PlaylistKit"
+Name: "{autodesktop}\PlaylistKit"; Filename: "{app}\PlaylistKitApp.exe"; AppUserModelID: "hiennv0298.PlaylistKit"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; \
