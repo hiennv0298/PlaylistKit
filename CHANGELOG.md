@@ -3,6 +3,13 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.1.1
+
+- First public build (0.1.0 was tagged but its installer could not be built).
+- Content ID preview shows clean song names.
+- The song check warns about lossy uploads only when they are really band-limited (below 13 kHz), so normal SoundCloud downloads are no longer flagged.
+- A demo and screenshots in the README.
+
 ## 0.1.0
 
 - First release.
