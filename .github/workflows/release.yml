@@ -1,0 +1,60 @@
+name: Release
+
+# Push a tag like v0.3.0 to build the Windows installer + portable zip and attach
+# them to a GitHub Release. The release text comes from that version's section in
+# CHANGELOG.md, and SHA256SUMS.txt lets the app's updater verify the download.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check version and release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $ver = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ($tag -ne $ver) { throw "Tag v$tag does not match pyproject.toml version $ver" }
+          python scripts/release_notes.py $tag > release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw "Add a '## $tag' section to CHANGELOG.md" }
+          Get-Content release-notes.md
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Build
+        shell: pwsh
+        run: ./scripts/build.ps1 -DownloadFfmpeg
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem dist -File -Include PlaylistKit-Setup-*.exe, PlaylistKit-*-portable.zip -Recurse |
+            ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |
+            Set-Content -Encoding ascii dist/SHA256SUMS.txt
+          Get-Content dist/SHA256SUMS.txt
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: playlistkit-windows
+          path: |
+            dist/PlaylistKit-Setup-*.exe
+            dist/PlaylistKit-*-portable.zip
+            dist/SHA256SUMS.txt
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          files: |
+            dist/PlaylistKit-Setup-*.exe
+            dist/PlaylistKit-*-portable.zip
+            dist/SHA256SUMS.txt

@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.venv-build/
+build/
+dist/
+.pytest_cache/
+build-log.txt
+# local test output
+*.mp4
+*.wav
+*.mp3
+*.m4a

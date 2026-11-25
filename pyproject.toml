@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "playlistkit"
+version = "0.1.0"
+description = "Find songs by genre, remix them into one seamless playlist, and make the YouTube video, title, description and tags."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "hiennv0298" }]
+dependencies = [
+    "yt-dlp>=2025.1.1",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pyinstaller>=6.10"]
+
+[project.urls]
+Homepage = "https://github.com/hiennv0298/PlaylistKit"
+
+[project.scripts]
+playlistkit = "playlistkit.cli:main"
+
+[project.gui-scripts]
+playlistkit-gui = "playlistkit.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+playlistkit = ["webui/*", "engine/*.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

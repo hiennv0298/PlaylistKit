@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlaylistKit</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e0533d'/%3E%3Cpath d='M9 10h11M9 15h11M9 20h7' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3Cpath d='M22 17v7' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='20.5' cy='24' r='2.4' fill='white'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0d0b10; --surface: #17141c; --surface-2: #201c27; --border: #2c2634; --border-2: #3a3244;
+    --text: #efeaf3; --muted: #a197ad; --faint: #6c6378;
+    --accent: #e0533d; --accent-2: #f08a3c; --accent-soft: rgba(224, 83, 61, .16);
+    --ok: #34c77b; --warn: #f2b84b; --bad: #f0605d; --cc: #5aa9f0;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  a { color: var(--accent-2); }
+  header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 12px 26px;
+    background: rgba(13, 11, 16, .88); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+  .logo { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+  .brand { font-weight: 700; font-size: 17px; cursor: pointer; }
+  .spacer { flex: 1; }
+  main { max-width: 1240px; margin: 0 auto; padding: 24px 26px 160px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 15px;
+    border-radius: 10px; border: 1px solid var(--border-2); background: var(--surface-2); cursor: pointer;
+    white-space: nowrap; transition: background .15s, border-color .15s, opacity .15s; }
+  .btn:hover { background: #2a2433; border-color: #4a4057; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.primary { border: 0; background: linear-gradient(135deg, var(--accent), var(--accent-2)); font-weight: 600;
+    box-shadow: 0 6px 18px rgba(224, 83, 61, .25); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.big { height: 44px; padding: 0 22px; font-size: 15px; }
+  .btn.small { height: 28px; padding: 0 10px; font-size: 12.5px; border-radius: 8px; }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { color: var(--text); background: var(--surface-2); }
+  .btn.danger { color: #ffb0ad; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .pad { padding: 22px; }
+  .hero { padding: 26px; background: radial-gradient(900px 260px at 0% 0%, rgba(224, 83, 61, .18), transparent 60%),
+    radial-gradient(700px 240px at 100% 0%, rgba(240, 138, 60, .10), transparent 60%), var(--surface); }
+  h1 { margin: 0 0 4px; font-size: 24px; } h2 { margin: 0 0 12px; font-size: 17px; } h3 { margin: 0 0 8px; font-size: 14px; }
+  .muted { color: var(--muted); } .faint { color: var(--faint); } .small { font-size: 12.5px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .col { display: flex; flex-direction: column; gap: 6px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .input, select.input, textarea.input { height: 38px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--border-2);
+    background: #110e15; outline: none; min-width: 0; }
+  textarea.input { height: auto; padding: 10px 12px; resize: vertical; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; }
+  .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .input.sm { height: 30px; padding: 0 8px; border-radius: 7px; font-size: 13px; }
+  label.chk { display: inline-flex; gap: 7px; align-items: center; cursor: pointer; user-select: none; }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field > span { font-size: 12.5px; color: var(--muted); }
+  .genres { display: flex; flex-direction: column; gap: 12px; margin: 14px 0; }
+  .ggroup h4 { margin: 0 0 6px; font-size: 12px; color: var(--faint); text-transform: uppercase; letter-spacing: .6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-2); background: var(--surface-2);
+    cursor: pointer; font-size: 13px; }
+  .chip.on { border-color: var(--accent); background: var(--accent-soft); }
+  .note { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; }
+  .note.warn { border-color: rgba(242, 184, 75, .4); color: #f6d58f; }
+  .projects { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; margin-top: 14px; }
+  .pcard { padding: 16px; cursor: pointer; transition: border-color .15s, transform .15s; }
+  .pcard:hover { border-color: var(--border-2); transform: translateY(-1px); }
+  .pcard .em { font-size: 24px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--border-2); color: var(--muted); }
+  .badge.ok { color: var(--ok); border-color: rgba(52, 199, 123, .4); } .badge.warn { color: var(--warn); border-color: rgba(242, 184, 75, .4); }
+  .badge.bad { color: var(--bad); border-color: rgba(240, 96, 93, .4); } .badge.cc { color: var(--cc); border-color: rgba(90, 169, 240, .45); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 18px 0; }
+  .tab { padding: 10px 16px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab.on { color: var(--text); border-color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 600; color: var(--faint); font-size: 12px; padding: 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 13px; }
+  tr.skip td { color: var(--faint); }
+  .tablewrap { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; }
+  .tablewrap thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  .ell { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flag { font-size: 12px; } .flag.bad { color: var(--bad); } .flag.warn { color: var(--warn); }
+  .thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 10px; background: #0a080c; border: 1px solid var(--border); }
+  .copyrow { display: flex; gap: 8px; align-items: flex-start; }
+  .copyrow .input { flex: 1; }
+  .trk { display: grid; grid-template-columns: 76px 1fr; gap: 6px; margin-bottom: 4px; }
+  #jobbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: rgba(23, 20, 28, .97);
+    border-top: 1px solid var(--border); padding: 12px 26px; }
+  .bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
+  #log { max-height: 220px; overflow: auto; margin-top: 10px; font: 12px/1.45 Consolas, monospace; color: var(--muted);
+    white-space: pre-wrap; background: #0e0b11; border-radius: 10px; padding: 10px; }
+  .modal { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .6); display: grid; place-items: center; padding: 20px; }
+  .modal .card { width: min(680px, 100%); max-height: 88vh; overflow: auto; padding: 24px; }
+  .notes { white-space: pre-wrap; font-size: 13.5px; line-height: 1.55; }
+  #updbar { margin: 14px 0 0; padding: 12px 16px; display: flex; gap: 12px; align-items: center; border-color: rgba(240, 138, 60, .5); }
+  .err { color: #ffb0ad; white-space: pre-wrap; font-size: 13px; }
+  audio { height: 34px; width: 100%; max-width: 560px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } main { padding: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><svg width="18" height="18" viewBox="0 0 32 32"><path d="M6 9h14M6 15h14M6 21h9" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M24 15v9" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><circle cx="22" cy="24" r="3" fill="#fff"/></svg></div>
+  <div class="brand" onclick="goHome()">PlaylistKit</div>
+  <button class="btn ghost small" id="verBtn" title="Check for updates" onclick="checkUpdates(true)">v…</button>
+  <div class="spacer"></div>
+  <button class="btn ghost" onclick="openSettings()">⚙ Settings</button>
+</header>
+<main>
+  <div id="updbar" class="card" hidden>
+    <div style="flex:1"><b id="updTitle"></b> <span class="muted small" id="updSub"></span></div>
+    <button class="btn small" onclick="showNotes()">What's new</button>
+    <button class="btn small primary" id="updGo" onclick="installUpdate()">Update now</button>
+    <button class="btn small ghost" onclick="hideUpdate()">Later</button>
+  </div>
+
+  <!-- HOME -->
+  <section id="home">
+    <div class="card hero" style="margin-top:14px">
+      <h1>New playlist</h1>
+      <p class="muted" style="margin:0">Pick a genre: PlaylistKit finds songs, checks them, remixes them into one seamless mix and writes the YouTube title, description, tags and video.</p>
+      <div class="genres" id="genrePick"></div>
+      <div class="note" id="genreRisk"></div>
+      <div class="row" style="margin-top:14px">
+        <input class="input" id="newName" placeholder="Project name (optional)" style="width:260px">
+        <button class="btn primary big" onclick="createProject()">Create playlist</button>
+        <span class="muted">or</span>
+        <button class="btn" onclick="createFromFolder()">Use a folder of songs…</button>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:18px">
+      <div class="card pad">
+        <h2>Quick video</h2>
+        <p class="muted small" style="margin-top:-6px">Any thumbnail + any WAV/MP3 → MP4 for YouTube.</p>
+        <div class="col">
+          <div class="row"><button class="btn small" onclick="pickQuick('image')">Image…</button><span class="ell small" id="qImage">no image</span></div>
+          <div class="row"><button class="btn small" onclick="pickQuick('audio')">Audio…</button><span class="ell small" id="qAudio">no audio</span></div>
+          <div class="row" id="qRes"></div>
+          <div class="row"><button class="btn primary" onclick="quickVideo()">Make MP4</button></div>
+        </div>
+      </div>
+      <div class="card pad">
+        <h2>Song backlog</h2>
+        <div class="muted small" id="blSummary">…</div>
+        <p class="faint small">Every song you download, use, remove or get claimed is written here, so a song never comes back twice. Set the file and banned artists in Settings.</p>
+      </div>
+    </div>
+
+    <h2 style="margin-top:26px">Your playlists</h2>
+    <div class="projects" id="projects"></div>
+  </section>
+
+  <!-- PROJECT -->
+  <section id="proj" hidden>
+    <div class="row" style="margin-top:16px">
+      <button class="btn ghost" onclick="goHome()">← All playlists</button>
+      <span class="em" id="pEmoji" style="font-size:24px"></span>
+      <input class="input" id="pName" style="width:280px;font-weight:600" onchange="updateProject({name:this.value})">
+      <select class="input" id="pGenre" onchange="updateProject({genre:this.value})"></select>
+      <span class="muted small" id="pInfo"></span>
+      <div class="spacer"></div>
+      <button class="btn small" onclick="api('/api/open',{id:P.id})">Open folder</button>
+      <button class="btn small danger" onclick="deleteProject()">Delete</button>
+    </div>
+    <div class="tabs">
+      <div class="tab" data-tab="songs" onclick="tab('songs')">1 · Songs</div>
+      <div class="tab" data-tab="remix" onclick="tab('remix')">2 · Remix</div>
+      <div class="tab" data-tab="yt" onclick="tab('yt')">3 · YouTube &amp; video</div>
+      <div class="tab" data-tab="cid" onclick="tab('cid')">4 · Content ID</div>
+    </div>
+
+    <div id="t-songs" class="tabpane">
+      <div class="card pad">
+        <h2>Find songs</h2>
+        <div class="row" id="srcList"></div>
+        <div class="row" style="margin-top:10px">
+          <label class="field"><span>How many</span><input class="input sm" id="fCount" type="number" min="2" max="80" style="width:80px"></label>
+          <label class="field" style="flex:1;min-width:280px"><span>Optional: your own search words, a SoundCloud set / YouTube playlist link, or a folder</span>
+            <input class="input sm" id="fExtra" placeholder="e.g. https://soundcloud.com/someone/sets/indie-viet"></label>
+          <label class="chk" style="margin-top:18px"><input type="checkbox" id="fUsedArtists"> allow artists used before</label>
+          <button class="btn primary" style="margin-top:18px" onclick="findSongs()">Find songs</button>
+        </div>
+        <div class="note warn small" id="pRisk" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card pad" style="margin-top:16px" id="candBox" hidden>
+        <div class="row"><h2 style="margin:0">Found</h2><span class="muted small" id="candInfo"></span><div class="spacer"></div>
+          <label class="chk small"><input type="checkbox" id="showSkipped" onchange="renderCands()"> show filtered</label>
+          <button class="btn primary" onclick="downloadSel()">Download selected</button></div>
+        <div class="tablewrap" style="margin-top:10px"><table><thead><tr><th></th><th>Song</th><th>Source</th><th>Rights</th><th>Length</th><th>Plays</th><th>Note</th></tr></thead><tbody id="candRows"></tbody></table></div>
+      </div>
+
+      <div class="card pad" style="margin-top:16px">
+        <div class="row"><h2 style="margin:0">Songs in this playlist</h2><span class="muted small" id="songInfo"></span><div class="spacer"></div>
+          <button class="btn small" onclick="api('/api/open',{id:P.id,area:'song'})">Open songs folder</button>
+          <button class="btn" onclick="startJob('/api/screen',{id:P.id})">Check songs</button></div>
+        <p class="faint small">Songs marked red usually sound wrong in this genre (heavy 808 sub-bass, low quality, duplicates). Removing a song sends it to the Recycle Bin and adds it to the backlog so it is never downloaded again.</p>
+        <audio id="songPlayer" controls hidden></audio>
+        <div class="tablewrap"><table><thead><tr><th>Song</th><th>Length</th><th>Sub-bass</th><th>Check</th><th></th></tr></thead><tbody id="songRows"></tbody></table></div>
+      </div>
+    </div>
+
+    <div id="t-remix" class="tabpane" hidden>
+      <div class="card pad">
+        <h2>Remix</h2>
+        <div class="row">
+          <label class="field"><span>Style</span><select class="input" id="rStyle"></select></label>
+          <label class="chk" style="margin-top:18px"><input type="checkbox" id="rKey"> allow key changes</label>
+          <label class="field"><span>Max tempo change</span><select class="input" id="rStretch"><option value="0.04">4%</option><option value="0.08">8%</option><option value="0.12">12%</option></select></label>
+          <label class="field"><span>Transition (s)</span><input class="input" id="rTrans" type="number" value="14" min="4" max="40" style="width:80px"></label>
+          <button class="btn primary big" style="margin-top:18px" onclick="remix()">Remix</button>
+        </div>
+        <p class="faint small" id="styleHelp"></p>
+        <div class="note small" id="aiNote" style="margin-top:8px">…</div>
+      </div>
+      <div class="card pad" style="margin-top:16px" id="mixBox" hidden>
+        <h2>The mix</h2>
+        <audio id="mixPlayer" controls preload="none"></audio>
+        <div class="small muted" id="mixFiles" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div id="t-yt" class="tabpane" hidden>
+      <div class="grid2">
+        <div class="card pad">
+          <h2>Title, description, tags</h2>
+          <div class="row"><input class="input" id="mName" placeholder="playlist name, e.g. chuyện mưa và những câu xin chào" style="flex:1">
+            <button class="btn" onclick="saveMeta()">Update</button></div>
+          <div class="field" style="margin-top:12px"><span>Title</span><div class="copyrow"><input class="input" id="mTitle" readonly><button class="btn small" onclick="copy('mTitle')">Copy</button></div></div>
+          <div class="field" style="margin-top:10px"><span>Description</span><div class="copyrow"><textarea class="input" id="mDesc" rows="14" readonly></textarea><button class="btn small" onclick="copy('mDesc')">Copy</button></div></div>
+          <div class="field" style="margin-top:10px"><span>Tags</span><div class="copyrow"><textarea class="input" id="mTags" rows="3" readonly></textarea><button class="btn small" onclick="copy('mTags')">Copy</button></div></div>
+          <details style="margin-top:12px"><summary class="muted">Edit song names in the tracklist</summary>
+            <div id="trkEdit" style="margin-top:10px"></div>
+            <button class="btn small" onclick="saveMeta(true)">Save names</button></details>
+        </div>
+        <div class="card pad">
+          <h2>Video</h2>
+          <img class="thumb" id="thumbImg" alt="" hidden>
+          <div class="row" style="margin-top:10px"><button class="btn" onclick="pickThumb()">Choose thumbnail…</button><span class="muted small" id="thumbName"></span></div>
+          <div class="row" style="margin-top:12px" id="vRes"></div>
+          <div class="row" style="margin-top:12px"><button class="btn primary big" onclick="makeVideo()">Make MP4</button></div>
+          <p class="faint small">Still image + the mix, 2 fps H.264 + AAC 384k, made for YouTube. Non-16:9 images sit on a blurred copy of themselves.</p>
+          <h3 style="margin-top:16px">Files</h3>
+          <div id="outFiles" class="small"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="t-cid" class="tabpane" hidden>
+      <div class="card pad">
+        <h2>Cut Content ID claims</h2>
+        <p class="muted small" style="margin-top:-6px">Paste the claim times from YouTube Studio (Copyright → See details). PlaylistKit finds the songs, removes them from the mix without re-rendering, then updates the tracklist, the description and the backlog.</p>
+        <textarea class="input" id="cidText" rows="7" style="width:100%" placeholder="47:48 — 51:52&#10;1:06:09 — 1:09:29"></textarea>
+        <div class="row" style="margin-top:10px"><button class="btn" onclick="cidPreview()">Preview</button><button class="btn primary" id="cidGo" onclick="cidApply()" disabled>Cut these songs</button></div>
+        <div id="cidOut" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="jobbar" hidden>
+  <div class="row"><b id="jobLabel"></b><span class="muted" id="jobStatus"></span><div class="spacer"></div>
+    <button class="btn small ghost" onclick="toggleLog()">Log</button>
+    <button class="btn small" id="jobStop" onclick="api('/api/stop',{})">Stop</button>
+    <button class="btn small ghost" id="jobClose" onclick="closeJob()">✕</button></div>
+  <div class="bar"><i id="jobBar"></i></div>
+  <div class="err" id="jobErr"></div>
+  <div id="log" hidden></div>
+</div>
+
+<div class="modal" id="settings" hidden onclick="if(event.target===this)this.hidden=true">
+  <div class="card">
+    <h2>Settings</h2>
+    <div class="col" style="gap:12px">
+      <label class="field"><span>Playlists folder</span><div class="row"><input class="input" id="sProjects" style="flex:1"><button class="btn small" onclick="pickInto('sProjects','folder')">Browse</button></div></label>
+      <label class="field"><span>Backlog file (.tsv). Empty = backlog.tsv in the playlists folder</span><input class="input" id="sBacklog"></label>
+      <label class="field"><span>Never use these artists (comma separated)</span><input class="input" id="sBanned" placeholder="e.g. Artist A, Artist B"></label>
+      <label class="field"><span>Jamendo client ID (free at devportal.jamendo.com, enables the Jamendo source)</span><input class="input" id="sJamendo"></label>
+      <div class="field"><span>AI runtime for the remix (PyTorch + Demucs)</span>
+        <div class="note small" id="sAi">…</div>
+        <div class="row"><input class="input" id="sAiPy" placeholder="optional: an existing python.exe that has torch + demucs" style="flex:1"><button class="btn small" onclick="checkAi()">Check</button></div>
+        <div class="row"><button class="btn primary small" onclick="installAi()">Install AI (about 2.5 GB)</button>
+          <label class="field" style="flex-direction:row;align-items:center;gap:8px"><span>Device</span><select class="input sm" id="sDevice"><option value="cuda">NVIDIA GPU</option><option value="cpu">CPU</option></select></label>
+          <label class="chk small"><input type="checkbox" id="sLow"> low priority (lets games or video editors go first)</label></div></div>
+      <label class="chk"><input type="checkbox" id="sUpd"> Check for updates once a day</label>
+    </div>
+    <div class="row" style="margin-top:18px"><div class="spacer"></div><button class="btn" onclick="$('settings').hidden=true">Cancel</button><button class="btn primary" onclick="saveSettings()">Save</button></div>
+  </div>
+</div>
+
+<div class="modal" id="notes" hidden onclick="if(event.target===this)closeNotes()">
+  <div class="card"><h2 id="notesTitle">What's new</h2><div class="notes" id="notesBody"></div>
+    <div class="row" style="margin-top:16px"><div class="spacer"></div><button class="btn primary" onclick="closeNotes()">OK</button></div></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let G = {genres: [], groups: [], styles: [], sources: {}, resolutions: []}, S = {}, P = null, CUR_TAB = 'songs';
+let NEW_GENRE = 'indie', QUICK = {image: '', audio: ''}, LAST_PHASE = '', UPD = null, JOB_SEEN = '';
+const STYLE_HELP = {indie: 'Soft drums, low sub-bass, vocals forward, 4% slower. For indie, acoustic, ballad.',
+  lofi: 'Beat-matched, lo-fi filter, 8% slower. For chill, lo-fi, study.', dj: 'Beat-matched stem transitions, no effect. For pop, rap, K-Pop.',
+  club: 'Like dj with harder drums and bass. For remix, EDM, vinahouse.', slowed: '15% slower with reverb. For slowed + reverb, Douyin.',
+  nightcore: '20% faster and higher.'};
+
+async function api(path, body) {
+  const opt = body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json', 'X-PlaylistKit': '1'}, body: JSON.stringify(body)};
+  const r = await fetch(path, opt); const data = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = data.error || r.statusText; toast(e); throw new Error(e); }
+  return data;
+}
+function toast(msg) { $('jobbar').hidden = false; $('jobErr').textContent = msg; }
+function fmt(s) { s = Math.round(s || 0); const m = Math.floor(s / 60), x = s % 60; return `${m}:${String(x).padStart(2, '0')}`; }
+function num(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n || 0); }
+function copy(id) { const el = $(id); el.select(); navigator.clipboard.writeText(el.value); }
+const SAFETY = {cc: ['cc', 'Creative Commons'], artist: ['ok', 'artist upload'], unknown: ['', 'unknown'], distributed: ['bad', 'Content ID likely']};
+
+// ---------------------------------------------------------------- home
+async function init() {
+  G = await api('/api/genres'); S = await api('/api/settings');
+  const u = await api('/api/update'); $('verBtn').textContent = 'v' + u.current; showUpdate(u);
+  renderGenrePick(); renderRes('qRes', 'q'); renderRes('vRes', 'v');
+  $('pGenre').innerHTML = G.groups.map(gr => `<optgroup label="${esc(gr)}">` + G.genres.filter(g => g.group === gr).map(g => `<option value="${g.id}">${g.emoji} ${esc(g.name)}</option>`).join('') + '</optgroup>').join('');
+  $('rStyle').innerHTML = G.styles.map(s => `<option>${s}</option>`).join('');
+  $('rStyle').onchange = () => $('styleHelp').textContent = STYLE_HELP[$('rStyle').value] || '';
+  $('srcList').innerHTML = Object.entries(G.sources).map(([k, v]) => `<label class="chk"><input type="checkbox" class="src" value="${k}"> ${esc(v)}</label>`).join('');
+  const route = location.hash.slice(1); if (route) openProject(route); else goHome();
+  poll();
+}
+function renderRes(el, pfx) {
+  $(el).innerHTML = G.resolutions.map(r => `<label class="chk"><input type="checkbox" class="${pfx}res" value="${r}" ${r === (S.video_res || '720p') ? 'checked' : ''}> ${r}</label>`).join('');
+}
+function renderGenrePick() {
+  $('genrePick').innerHTML = G.groups.map(gr => `<div class="ggroup"><h4>${esc(gr)}</h4><div class="chips">` +
+    G.genres.filter(g => g.group === gr).map(g => `<span class="chip ${g.id === NEW_GENRE ? 'on' : ''}" onclick="pickGenre('${g.id}')">${g.emoji} ${esc(g.name)}</span>`).join('') + '</div></div>').join('');
+  const g = G.genres.find(g => g.id === NEW_GENRE); $('genreRisk').textContent = g ? `Remix style: ${g.style}. ${g.risk_text}` : '';
+}
+function pickGenre(id) { NEW_GENRE = id; renderGenrePick(); }
+async function goHome() {
+  P = null; location.hash = ''; $('home').hidden = false; $('proj').hidden = true;
+  const list = await api('/api/projects');
+  $('projects').innerHTML = list.length ? list.map(p => `<div class="card pcard" onclick="openProject('${p.id}')">
+      <div class="row"><span class="em">${p.emoji}</span><div style="flex:1;min-width:0"><b class="ell" style="display:block">${esc(p.name)}</b>
+      <span class="muted small">${esc(p.genre_name)} · ${p.songs} songs</span></div></div>
+      <div class="row small" style="margin-top:10px">${p.has_mix ? '<span class="badge ok">mix ready</span>' : '<span class="badge">no mix yet</span>'}
+      ${p.videos.length ? `<span class="badge ok">${p.videos.length} video</span>` : ''}</div>
+      ${p.title ? `<div class="faint small ell" style="margin-top:8px">${esc(p.title)}</div>` : ''}</div>`).join('') : '<p class="faint">No playlists yet.</p>';
+  api('/api/backlog').then(b => { $('blSummary').innerHTML = `${b.total} songs in <code>${esc(b.path)}</code><br>` +
+    Object.entries(b.counts).map(([k, v]) => `<span class="badge">${esc(k)} ${v}</span>`).join(' '); }).catch(() => {});
+}
+async function createProject() {
+  const p = await api('/api/project/create', {genre: NEW_GENRE, name: $('newName').value});
+  $('newName').value = ''; openProject(p.id);
+}
+async function createFromFolder() {
+  const r = await api('/api/pick', {kind: 'folder'}); if (!r.path) return;
+  const p = await api('/api/project/create', {genre: NEW_GENRE, name: $('newName').value || r.path.split(/[\\/]/).pop(), songs_dir: r.path});
+  await openProject(p.id); startJob('/api/screen', {id: p.id});
+}
+async function pickQuick(kind) {
+  const r = await api('/api/pick', {kind}); if (!r.path) return; QUICK[kind] = r.path;
+  $(kind === 'image' ? 'qImage' : 'qAudio').textContent = r.path;
+}
+function resOf(pfx) { return [...document.querySelectorAll('.' + pfx + 'res:checked')].map(x => x.value); }
+function quickVideo() { startJob('/api/video', {image: QUICK.image, audio: QUICK.audio, resolutions: resOf('q')}); }
+
+// ---------------------------------------------------------------- project
+async function openProject(id) {
+  P = await api('/api/project?id=' + encodeURIComponent(id));
+  location.hash = id; $('home').hidden = true; $('proj').hidden = false;
+  $('pEmoji').textContent = P.emoji; $('pName').value = P.name; $('pGenre').value = P.genre;
+  $('pInfo').textContent = `${P.songs} songs · ${P.songs_dir}`;
+  $('pRisk').textContent = P.risk_text;
+  const srcs = (G.genres.find(g => g.id === P.genre) || {}).sources || (S.sources || '').split(',');
+  document.querySelectorAll('.src').forEach(c => c.checked = srcs.includes(c.value));
+  $('fCount').value = S.count || 30; $('fUsedArtists').checked = !!S.allow_used_artists;
+  const g = G.genres.find(g => g.id === P.genre);
+  $('rStyle').value = P.style; $('styleHelp').textContent = STYLE_HELP[P.style] || '';
+  $('rKey').checked = !['indie', 'lofi'].includes(P.style); $('rStretch').value = ['indie', 'lofi'].includes(P.style) ? '0.04' : '0.08';
+  renderCands(); renderSongs(); renderMix(); renderMeta(); tab(CUR_TAB);
+  api('/api/ai').then(a => $('aiNote').innerHTML = a.ok ? `AI runtime ready: torch ${esc(a.torch)}, ${a.cuda ? 'GPU (CUDA)' : 'CPU only'}${a.gpu ? ' · ' + esc(a.gpu) : ''}`
+    : `The remix needs the AI runtime (PyTorch + Demucs). <button class="btn small primary" onclick="installAi()">Install AI</button> or set an existing Python in Settings.`);
+}
+async function refresh() { if (P) await openProject(P.id); }
+function tab(t) { CUR_TAB = t; document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
+  document.querySelectorAll('.tabpane').forEach(x => x.hidden = x.id !== 't-' + t); }
+async function updateProject(ch) { await api('/api/project/update', {id: P.id, ...ch}); refresh(); }
+async function deleteProject() { if (!confirm(`Move the playlist "${P.name}" and its files to the Recycle Bin?`)) return;
+  await api('/api/project/delete', {id: P.id}); goHome(); }
+function findSongs() {
+  const sources = [...document.querySelectorAll('.src:checked')].map(x => x.value);
+  startJob('/api/find', {id: P.id, sources, count: +$('fCount').value, extra: $('fExtra').value, allow_used_artists: $('fUsedArtists').checked});
+}
+function renderCands() {
+  const c = P.candidates || []; $('candBox').hidden = !c.length; if (!c.length) return;
+  const show = $('showSkipped').checked, rows = c.filter(x => show || !x.skip);
+  $('candInfo').textContent = `${c.filter(x => x.selected).length} selected · ${c.filter(x => !x.skip).length} pass the filters · ${c.length} found`;
+  $('candRows').innerHTML = rows.map(x => { const uid = x.source + ':' + x.sid, [cls, label] = SAFETY[x.safety] || ['', x.safety];
+    return `<tr class="${x.skip ? 'skip' : ''}"><td><input type="checkbox" class="cand" value="${esc(uid)}" ${x.selected ? 'checked' : ''} onchange="saveSel()"></td>
+    <td class="ell"><b>${esc(x.artist)}</b> — ${esc(x.title)}</td><td>${esc(x.source)}</td>
+    <td><span class="badge ${cls}" title="${esc((x.flags || []).join(', ') + ' ' + (x.license || ''))}">${label}</span></td>
+    <td>${fmt(x.duration)}</td><td>${num(x.plays)}</td>
+    <td class="small faint">${esc(x.skip)} ${x.url && x.url.startsWith('http') ? `<a href="#" onclick="api('/api/link',{url:'${esc(x.url)}'});return false">open</a>` : ''}</td></tr>`; }).join('');
+}
+async function saveSel() { const sel = [...document.querySelectorAll('.cand:checked')].map(x => x.value);
+  await api('/api/candidates', {id: P.id, selected: sel}); P.candidates.forEach(c => c.selected = sel.includes(c.source + ':' + c.sid));
+  $('candInfo').textContent = `${sel.length} selected`; }
+async function downloadSel() { await saveSel(); startJob('/api/download', {id: P.id}); }
+function renderSongs() {
+  const s = P.song_list || []; const total = s.reduce((a, x) => a + (x.duration || 0), 0);
+  $('songInfo').textContent = `${s.length} songs · about ${Math.round(total / 60)} min before mixing`;
+  $('songRows').innerHTML = s.map(x => { const worst = (x.flags || []).some(f => f.level === 'bad') ? 'bad' : (x.flags || []).length ? 'warn' : '';
+    return `<tr><td class="ell"><a href="#" onclick="playSong('${encodeURIComponent(x.file)}');return false" title="Play">▶</a> ${esc(x.file)}</td>
+    <td>${x.duration ? fmt(x.duration) : ''}</td><td>${x.sub_db != null ? x.sub_db + ' dB' : ''}</td>
+    <td>${x.checked ? (x.flags.length ? x.flags.map(f => `<div class="flag ${f.level}">${esc(f.text)}</div>`).join('') : '<span class="flag" style="color:var(--ok)">ok</span>') : '<span class="faint">not checked</span>'}</td>
+    <td><select class="input sm" onchange="removeSong('${encodeURIComponent(x.file)}', this)"><option value="">Remove…</option><option value="not-fit">doesn't fit</option>
+      <option value="bad-quality">bad quality</option><option value="duplicate">duplicate</option><option value="banned">ban this artist</option></select></td></tr>`; }).join('');
+}
+function playSong(f) { const a = $('songPlayer'); a.hidden = false; a.src = `/files/${P.id}/song/${f}`; a.play(); }
+async function removeSong(f, sel) { const reason = sel.value; if (!reason) return;
+  await api('/api/song/remove', {id: P.id, file: decodeURIComponent(f), reason}); refresh(); }
+function remix() { startJob('/api/remix', {id: P.id, style: $('rStyle').value, keyshift: $('rKey').checked, max_stretch: +$('rStretch').value, transition: +$('rTrans').value, reorder: true}); }
+function renderMix() {
+  $('mixBox').hidden = !P.mix.mp3 && !P.mix.wav; if ($('mixBox').hidden) return;
+  $('mixPlayer').src = `/files/${P.id}/out/${encodeURIComponent(P.mix.mp3 || P.mix.wav)}`;
+  $('mixFiles').textContent = Object.values(P.mix).join(' · ');
+}
+function renderMeta() {
+  const t = P.meta_text || ''; const part = (a, b) => { const i = t.indexOf(a); if (i < 0) return ''; const j = b ? t.indexOf(b, i) : -1; return t.slice(i + a.length, j < 0 ? undefined : j).trim(); };
+  $('mTitle').value = part('=== TITLE ===', '=== DESCRIPTION ==='); $('mDesc').value = part('=== DESCRIPTION ===', '=== TAGS'); $('mTags').value = t.includes('=== TAGS') ? t.slice(t.indexOf('\n', t.indexOf('=== TAGS'))).trim() : '';
+  $('mName').value = P.title_name || '';
+  $('trkEdit').innerHTML = (P.tracks || []).map((x, i) => `<div class="trk"><input class="input sm" value="${esc(x.ts)}" data-i="${i}" data-k="ts"><input class="input sm" value="${esc(x.name)}" data-i="${i}" data-k="name"></div>`).join('') || '<p class="faint small">Render the mix first.</p>';
+  $('thumbImg').hidden = !P.thumb; if (P.thumb) $('thumbImg').src = `/files/${P.id}/thumb/${encodeURIComponent(P.thumb.split(/[\\/]/).pop())}?t=${Date.now()}`;
+  $('thumbName').textContent = P.thumb ? P.thumb.split(/[\\/]/).pop() : 'no thumbnail yet';
+  $('outFiles').innerHTML = (P.outputs || []).map(f => `<div class="row" style="gap:6px"><a href="#" onclick="api('/api/open',{id:P.id,area:'out',file:'${esc(f)}'});return false">${esc(f)}</a></div>`).join('') || '<span class="faint">nothing yet</span>';
+}
+async function saveMeta(withTracks) {
+  const body = {id: P.id, name: $('mName').value};
+  if (withTracks) { const rows = {}; document.querySelectorAll('#trkEdit input').forEach(el => { (rows[el.dataset.i] ||= {})[el.dataset.k] = el.value; }); body.tracks = Object.values(rows); }
+  const r = await api('/api/meta', body); P.meta_text = r.text; P.title_name = r.name; P.tracks = r.tracks; renderMeta();
+}
+async function pickThumb() { const r = await api('/api/pick', {kind: 'image'}); if (!r.path) return; await api('/api/thumb', {id: P.id, path: r.path}); refresh(); }
+function makeVideo() { startJob('/api/video', {id: P.id, resolutions: resOf('v')}); }
+async function cidPreview() {
+  const r = await api('/api/cut/preview', {id: P.id, text: $('cidText').value});
+  $('cidOut').innerHTML = `<h3>${r.claimed.length} songs will be removed</h3>` + r.claimed.map(c => `<div>• <span class="muted">${c.ts}</span> ${esc(c.name)}</div>`).join('') +
+    `<p class="muted small">Cut: ${r.remove.map(x => x.join('–')).join(', ')} · length ${r.duration} → <b>${r.new_duration}</b>, ${r.new_tracks.length} songs left.</p>`;
+  $('cidGo').disabled = false;
+}
+function cidApply() { if (!confirm('Cut these songs from the mix? The songs go to the Recycle Bin and are marked "claimed" in the backlog.')) return;
+  $('cidGo').disabled = true; startJob('/api/cut/apply', {id: P.id, text: $('cidText').value}); }
+
+// ---------------------------------------------------------------- jobs
+let JOB_HIDDEN = false;
+async function startJob(path, body) { $('jobErr').textContent = ''; await api(path, body); JOB_HIDDEN = false; $('jobbar').hidden = false; LAST_PHASE = 'busy'; poll(true); }
+let pollTimer = null;
+async function poll(now) {
+  clearTimeout(pollTimer);
+  try {
+    const s = await api('/api/state');
+    if (s.busy || (s.phase !== 'idle' && !JOB_HIDDEN)) {
+      $('jobbar').hidden = false; $('jobLabel').textContent = s.label; $('jobStatus').textContent = s.status;
+      $('jobBar').style.width = s.progress + '%'; $('jobStop').hidden = !s.busy; $('jobClose').hidden = s.busy;
+      if (s.error) $('jobErr').textContent = s.error;
+      if (!$('log').hidden) { $('log').textContent = s.log.join('\n'); $('log').scrollTop = 1e9; }
+    }
+    if (LAST_PHASE === 'busy' && !s.busy) {  // a job just ended
+      if (s.phase === 'done') { if (P) refresh(); else goHome(); if (s.label === 'Installing the AI runtime') openSettings(); }
+      else if (P) refresh();
+    }
+    LAST_PHASE = s.busy ? 'busy' : s.phase;
+  } catch (e) {}
+  pollTimer = setTimeout(poll, 1000);
+}
+function toggleLog() { $('log').hidden = !$('log').hidden; poll(true); }
+function closeJob() { JOB_HIDDEN = true; $('jobbar').hidden = true; $('jobErr').textContent = ''; }
+
+// ---------------------------------------------------------------- settings
+async function openSettings() {
+  S = await api('/api/settings');
+  $('sProjects').value = S.projects_dir; $('sBacklog').value = S.backlog_path; $('sBanned').value = S.banned_artists;
+  $('sJamendo').value = S.jamendo_client_id; $('sAiPy').value = S.ai_python; $('sDevice').value = S.device;
+  $('sLow').checked = S.low_priority; $('sUpd').checked = S.check_updates; $('settings').hidden = false; checkAi(true);
+}
+async function checkAi(saved) {
+  $('sAi').textContent = 'Checking…';
+  const a = await api('/api/ai/check', {python: saved === true ? S.ai_python : $('sAiPy').value});
+  $('sAi').textContent = a.ok ? `Ready: ${a.python} · torch ${a.torch} · ${a.cuda ? 'CUDA GPU' : 'CPU only'}${a.gpu ? ' · ' + a.gpu : ''}` : `Not ready (${a.error}). GPU: ${a.gpu || 'none'}`;
+}
+async function pickInto(id, kind) { const r = await api('/api/pick', {kind}); if (r.path) $(id).value = r.path; }
+async function saveSettings() {
+  S = await api('/api/settings', {projects_dir: $('sProjects').value, backlog_path: $('sBacklog').value, banned_artists: $('sBanned').value,
+    jamendo_client_id: $('sJamendo').value, ai_python: $('sAiPy').value, device: $('sDevice').value, low_priority: $('sLow').checked, check_updates: $('sUpd').checked});
+  $('settings').hidden = true; if (P) refresh(); else goHome();
+}
+function installAi() { if (!confirm('Download and install PyTorch + Demucs (about 2.5 GB) into PlaylistKit\'s own folder? It takes 5-15 minutes.')) return;
+  $('settings').hidden = true; startJob('/api/ai/install', {}); }
+
+// ---------------------------------------------------------------- updates
+function showUpdate(u) {
+  UPD = u; $('verBtn').textContent = 'v' + u.current + (u.newer ? ' •' : '');
+  if (u.whats_new && u.whats_new.notes) { $('notesTitle').textContent = `What's new in ${u.whats_new.version}`; $('notesBody').textContent = u.whats_new.notes; $('notes').hidden = false; $('notes').dataset.seen = '1'; }
+  const p = u.progress || {};
+  if (!u.newer || sessionStorage.getItem('pk-later') === u.latest) { $('updbar').hidden = !['downloading', 'verifying', 'restarting', 'error'].includes(p.phase); }
+  else $('updbar').hidden = false;
+  $('updTitle').textContent = u.newer ? `PlaylistKit ${u.latest} is available` : '';
+  $('updSub').textContent = p.phase === 'downloading' ? `Downloading ${p.progress}%` : p.phase === 'verifying' ? 'Checking the download…' :
+    p.phase === 'restarting' ? 'Installing, PlaylistKit will reopen…' : p.phase === 'error' ? p.error : `You have ${u.current}.`;
+  $('updGo').textContent = u.can_install ? 'Update now' : u.mode === 'python' ? 'How to update' : 'Download';
+  if (['downloading', 'verifying', 'restarting'].includes(p.phase)) setTimeout(async () => showUpdate(await api('/api/update')), 800);
+}
+async function checkUpdates(force) { const u = force ? await api('/api/update/check', {}) : await api('/api/update'); sessionStorage.removeItem('pk-later'); showUpdate(u);
+  if (force && !u.newer) { $('notesTitle').textContent = `PlaylistKit ${u.current}`; $('notesBody').textContent = u.error || 'You have the latest version.'; $('notes').hidden = false; } }
+function showNotes() { $('notesTitle').textContent = `What's new in ${UPD.latest}`; $('notesBody').textContent = UPD.notes || ''; $('notes').hidden = false; }
+async function closeNotes() { $('notes').hidden = true; if ($('notes').dataset.seen) { delete $('notes').dataset.seen; await api('/api/update/seen', {}); } }
+function hideUpdate() { sessionStorage.setItem('pk-later', UPD.latest); $('updbar').hidden = true; }
+async function installUpdate() {
+  if (UPD.can_install) { await api('/api/update/install', {}); setTimeout(async () => showUpdate(await api('/api/update')), 500); }
+  else if (UPD.mode === 'python') { $('notesTitle').textContent = 'Update'; $('notesBody').textContent = 'Run again:\n  git pull\n  run.cmd\nor: pipx upgrade playlistkit'; $('notes').hidden = false; }
+  else api('/api/link', {url: UPD.page});
+}
+window.addEventListener('pagehide', () => navigator.sendBeacon('/api/bye', '{}'));
+init();
+</script>
+</body>
+</html>
