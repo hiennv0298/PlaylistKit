@@ -4,6 +4,12 @@ Make long music playlists for YouTube: pick a genre, PlaylistKit finds songs, ch
 
 Everything runs on your computer. No account, no API key (Jamendo needs a free client ID if you want that source).
 
+![PlaylistKit demo: pick a genre, review the songs it found, check them, remix, copy the YouTube text, cut Content ID claims](docs/demo.gif)
+
+| Pick a genre | Review the songs it found | Title, description, video |
+| :---: | :---: | :---: |
+| ![Home screen with 42 genres](docs/screenshot-home.png) | ![Songs found, with their rights](docs/screenshot-songs.png) | ![YouTube text and the video](docs/screenshot-yt.png) |
+
 ## What it does
 
 | Step | |

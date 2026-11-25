@@ -16,7 +16,7 @@ from pathlib import Path
 from playlistkit.backlog import Backlog, key
 from playlistkit.deps import find_ffmpeg
 from playlistkit.download import song_info
-from playlistkit.meta import read_tracklist, write_tracklist
+from playlistkit.meta import clean_track_name, read_tracklist, write_tracklist
 from playlistkit.project import Project
 from playlistkit.util import PlaylistKitError, fmt_ts, log, parse_ts, read_json, recycle, run, write_json
 
@@ -38,9 +38,9 @@ class Plan:
 
     def to_dict(self) -> dict:
         return {"claims": [[fmt_ts(a), fmt_ts(b)] for a, b in self.claims],
-                "claimed": [{"index": i, "ts": fmt_ts(self.tracks[i][0]), "name": self.tracks[i][1]} for i in self.claimed],
+                "claimed": [{"index": i, "ts": fmt_ts(self.tracks[i][0]), "name": clean_track_name(self.tracks[i][1])} for i in self.claimed],
                 "remove": [[fmt_ts(a), fmt_ts(b)] for a, b in self.remove],
-                "new_tracks": [{"ts": fmt_ts(t), "name": n} for t, n in self.new_tracks],
+                "new_tracks": [{"ts": fmt_ts(t), "name": clean_track_name(n)} for t, n in self.new_tracks],
                 "duration": fmt_ts(self.duration), "new_duration": fmt_ts(self.new_duration)}
 
 

@@ -423,6 +423,11 @@ def reveal(path: Path) -> None:
 
 # ---------------------------------------------------------------- HTTP
 
+def _demo_script() -> str:
+    path = os.environ.get("PLAYLISTKIT_DEMO_JS", "")
+    return Path(path).read_text(encoding="utf-8") if path and Path(path).is_file() else ""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "PlaylistKit"
     protocol_version = "HTTP/1.1"
@@ -494,7 +499,11 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path in ("/", "/index.html"):
                 html = (WEBUI / "index.html").read_text(encoding="utf-8")
+                if _demo_script():  # PLAYLISTKIT_DEMO_JS: a script that stages screens for the README demo
+                    html = html.replace("</body>", '<script src="/__demo.js"></script></body>')
                 return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
+            if path == "/__demo.js" and _demo_script():
+                return self._send(200, _demo_script().encode("utf-8"), "text/javascript; charset=utf-8")
             if path == "/api/ping":
                 return self._json({"app": "playlistkit", "version": __version__})
             if path == "/api/state":

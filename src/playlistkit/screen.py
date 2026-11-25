@@ -72,7 +72,7 @@ def check_song(path: Path, genre_id: str) -> dict:
         flags.append(("warn", f"heavy sub-bass ({st['sub_db']} dB), listen first"))
     if 0 < st["cutoff_khz"] < 11:
         flags.append(("bad", f"low quality: nothing above {st['cutoff_khz']} kHz"))
-    elif 0 < st["cutoff_khz"] < 15:
+    elif 0 < st["cutoff_khz"] < 13:
         flags.append(("warn", f"lossy upload (cuts at {st['cutoff_khz']} kHz)"))
     if info["duration"] and info["duration"] < max(60, g.min_sec - 30):
         flags.append(("warn", f"short ({info['duration'] / 60:.1f} min)"))
