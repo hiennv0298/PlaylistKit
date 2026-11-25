@@ -41,7 +41,7 @@ IDLE_EXIT = 150
 MEDIA_TYPES = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav", ".ogg": "audio/ogg",
                ".opus": "audio/ogg", ".webm": "audio/webm", ".flac": "audio/flac", ".aac": "audio/aac",
                ".mp4": "video/mp4", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-               ".webp": "image/webp", ".txt": "text/plain; charset=utf-8"}
+               ".webp": "image/webp", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8"}
 REMIX_STEPS = {"1)": (0, 12), "2)": (12, 1), "3)": (13, 50), "4)": (63, 24), "5)": (87, 13)}
 
 
@@ -502,6 +502,8 @@ class Handler(BaseHTTPRequestHandler):
                 if _demo_script():  # PLAYLISTKIT_DEMO_JS: a script that stages screens for the README demo
                     html = html.replace("</body>", '<script src="/__demo.js"></script></body>')
                 return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
+            if path in ("/icon-32.png", "/icon-192.png", "/icon-512.png", "/favicon.ico"):
+                return self._serve_file(WEBUI / ("playlistkit.ico" if path == "/favicon.ico" else path[1:]))
             if path == "/__demo.js" and _demo_script():
                 return self._send(200, _demo_script().encode("utf-8"), "text/javascript; charset=utf-8")
             if path == "/api/ping":

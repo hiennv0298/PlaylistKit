@@ -3,6 +3,12 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.1.2
+
+- **New app icon**, drawn separately for every size so it stays sharp in the taskbar, title bar, Start menu and desktop.
+- The app window's taskbar icon is no longer blurry (the window now uses 32/192/512 px icons).
+- When the window loses PlaylistKit (after **Update now**, or after PlaylistKit was closed), it says so and tells you what to do, instead of buttons silently doing nothing.
+
 ## 0.1.1
 
 - First public build (0.1.0 was tagged but its installer could not be built).

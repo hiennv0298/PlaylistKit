@@ -4,7 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PlaylistKit</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23e0533d'/%3E%3Cpath d='M9 10h11M9 15h11M9 20h7' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3Cpath d='M22 17v7' stroke='white' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='20.5' cy='24' r='2.4' fill='white'/%3E%3C/svg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <style>
   :root {
     --bg: #0d0b10; --surface: #17141c; --surface-2: #201c27; --border: #2c2634; --border-2: #3a3244;
@@ -21,8 +24,7 @@
   a { color: var(--accent-2); }
   header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; padding: 12px 26px;
     background: rgba(13, 11, 16, .88); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
-  .logo { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+  .logo { width: 32px; height: 32px; display: block; }
   .brand { font-weight: 700; font-size: 17px; cursor: pointer; }
   .spacer { flex: 1; }
   main { max-width: 1240px; margin: 0 auto; padding: 24px 26px 160px; }
@@ -104,7 +106,7 @@
 </head>
 <body>
 <header>
-  <div class="logo"><svg width="18" height="18" viewBox="0 0 32 32"><path d="M6 9h14M6 15h14M6 21h9" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><path d="M24 15v9" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/><circle cx="22" cy="24" r="3" fill="#fff"/></svg></div>
+  <img class="logo" src="/icon-192.png" alt="" width="32" height="32">
   <div class="brand" onclick="goHome()">PlaylistKit</div>
   <button class="btn ghost small" id="verBtn" title="Check for updates" onclick="checkUpdates(true)">v…</button>
   <div class="spacer"></div>
@@ -293,6 +295,12 @@
   </div>
 </div>
 
+<div class="modal" id="gone" hidden>
+  <div class="card" style="text-align:center"><img src="/icon-192.png" alt="" width="64" height="64" onerror="this.remove()">
+    <h2 id="goneTitle" style="margin-top:12px"></h2><p class="muted" id="goneText"></p>
+    <div class="row" style="justify-content:center;margin-top:14px"><button class="btn primary" onclick="window.close()">Close this window</button></div></div>
+</div>
+
 <div class="modal" id="notes" hidden onclick="if(event.target===this)closeNotes()">
   <div class="card"><h2 id="notesTitle">What's new</h2><div class="notes" id="notesBody"></div>
     <div class="row" style="margin-top:16px"><div class="spacer"></div><button class="btn primary" onclick="closeNotes()">OK</button></div></div>
@@ -310,7 +318,9 @@ const STYLE_HELP = {indie: 'Soft drums, low sub-bass, vocals forward, 4% slower.
 
 async function api(path, body) {
   const opt = body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json', 'X-PlaylistKit': '1'}, body: JSON.stringify(body)};
-  const r = await fetch(path, opt); const data = await r.json().catch(() => ({}));
+  let r;
+  try { r = await fetch(path, opt); } catch (e) { showGone(); throw e; }  // the app (server) is not running any more
+  const data = await r.json().catch(() => ({}));
   if (!r.ok) { const e = data.error || r.statusText; toast(e); throw new Error(e); }
   return data;
 }
@@ -458,7 +468,15 @@ function cidApply() { if (!confirm('Cut these songs from the mix? The songs go t
 // ---------------------------------------------------------------- jobs
 let JOB_HIDDEN = false;
 async function startJob(path, body) { $('jobErr').textContent = ''; await api(path, body); JOB_HIDDEN = false; $('jobbar').hidden = false; LAST_PHASE = 'busy'; poll(true); }
-let pollTimer = null;
+let pollTimer = null, FAILS = 0, GONE = false, UPDATING = false;
+function showGone() {
+  if (GONE) return; GONE = true; clearTimeout(pollTimer);
+  $('goneTitle').textContent = UPDATING ? 'Installing the update…' : 'PlaylistKit is not running';
+  $('goneText').textContent = UPDATING
+    ? 'PlaylistKit closed itself so the new version can be installed. It reopens by itself in a few seconds. You can close this window.'
+    : 'This window lost its connection to PlaylistKit (it was closed, updated, or quit after the window sat unused). Close this window and open PlaylistKit again from the Start menu or desktop.';
+  $('gone').hidden = false;
+}
 async function poll(now) {
   clearTimeout(pollTimer);
   try {
@@ -474,8 +492,9 @@ async function poll(now) {
       else if (P) refresh();
     }
     LAST_PHASE = s.busy ? 'busy' : s.phase;
-  } catch (e) {}
-  pollTimer = setTimeout(poll, 1000);
+    FAILS = 0;
+  } catch (e) { if (++FAILS >= 3) showGone(); }
+  if (!GONE) pollTimer = setTimeout(poll, 1000);
 }
 function toggleLog() { $('log').hidden = !$('log').hidden; poll(true); }
 function closeJob() { JOB_HIDDEN = true; $('jobbar').hidden = true; $('jobErr').textContent = ''; }
@@ -512,6 +531,7 @@ function showUpdate(u) {
   $('updSub').textContent = p.phase === 'downloading' ? `Downloading ${p.progress}%` : p.phase === 'verifying' ? 'Checking the download…' :
     p.phase === 'restarting' ? 'Installing, PlaylistKit will reopen…' : p.phase === 'error' ? p.error : `You have ${u.current}.`;
   $('updGo').textContent = u.can_install ? 'Update now' : u.mode === 'python' ? 'How to update' : 'Download';
+  if (p.phase === 'restarting') UPDATING = true;
   if (['downloading', 'verifying', 'restarting'].includes(p.phase)) setTimeout(async () => showUpdate(await api('/api/update')), 800);
 }
 async function checkUpdates(force) { const u = force ? await api('/api/update/check', {}) : await api('/api/update'); sessionStorage.removeItem('pk-later'); showUpdate(u);
@@ -520,7 +540,7 @@ function showNotes() { $('notesTitle').textContent = `What's new in ${UPD.latest
 async function closeNotes() { $('notes').hidden = true; if ($('notes').dataset.seen) { delete $('notes').dataset.seen; await api('/api/update/seen', {}); } }
 function hideUpdate() { sessionStorage.setItem('pk-later', UPD.latest); $('updbar').hidden = true; }
 async function installUpdate() {
-  if (UPD.can_install) { await api('/api/update/install', {}); setTimeout(async () => showUpdate(await api('/api/update')), 500); }
+  if (UPD.can_install) { UPDATING = true; await api('/api/update/install', {}); setTimeout(async () => showUpdate(await api('/api/update')), 500); }
   else if (UPD.mode === 'python') { $('notesTitle').textContent = 'Update'; $('notesBody').textContent = 'Run again:\n  git pull\n  run.cmd\nor: pipx upgrade playlistkit'; $('notes').hidden = false; }
   else api('/api/link', {url: UPD.page});
 }
