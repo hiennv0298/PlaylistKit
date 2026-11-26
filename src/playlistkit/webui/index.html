@@ -35,7 +35,7 @@
   .btn:disabled { opacity: .45; cursor: default; }
   .btn.pending { cursor: progress; }
   /* while a background job runs, every button that starts a job is off (one job at a time) */
-  body.job-busy [data-job] { opacity: .45; pointer-events: none; }
+  body.job-busy [data-job] { opacity: .45; cursor: not-allowed; }  /* still clickable: a click says why it waits */
   .btn.primary { border: 0; background: linear-gradient(135deg, var(--accent), var(--accent-2)); font-weight: 600;
     box-shadow: 0 6px 18px rgba(224, 83, 61, .25); }
   .btn.primary:hover { filter: brightness(1.08); }
@@ -371,12 +371,25 @@ const STYLE_HELP = {indie: 'Soft drums, low sub-bass, vocals forward, 4% slower.
 async function api(path, body) {
   const opt = body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json', 'X-PlaylistKit': '1'}, body: JSON.stringify(body)};
   let r;
-  try { r = await fetch(path, opt); } catch (e) { showGone(); throw e; }  // the app (server) is not running any more
+  try { r = await fetch(path, opt); } catch (e) { showGone(); e.handled = true; throw e; }  // the app (server) is not running any more
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) { const e = data.error || r.statusText; toast(e); throw new Error(e); }
+  if (!r.ok) { const e = data.error || r.statusText; toast(e); const err = new Error(e); err.handled = true; throw err; }
   return data;
 }
 function toast(msg) { $('jobbar').hidden = false; $('jobErr').textContent = msg; }
+// a button that starts a job was pressed while another job runs: say which one, instead of doing nothing
+function busyNote() { JOB_HIDDEN = false; toast(`PlaylistKit is still busy with "${$('jobLabel').textContent || 'another job'}". ` +
+  'It does one job at a time: wait for it to finish, or press Stop, then press the button again.'); }
+// An error in the page used to vanish (a button then did nothing at all): show it, and write it into the
+// app's log so it can be read later. Errors api() already showed are not shown twice.
+function pageError(msg) {
+  const m = String(msg || 'unknown error').slice(0, 600);
+  toast('Something went wrong in the window: ' + m);
+  fetch('/api/clientlog', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-PlaylistKit': '1'},
+    body: JSON.stringify({msg: m, where: location.hash})}).catch(() => {});
+}
+window.addEventListener('error', e => pageError(e.message + (e.filename ? ` (${e.filename.split('/').pop()}:${e.lineno})` : '')));
+window.addEventListener('unhandledrejection', e => { const r = e.reason; if (!(r && r.handled)) pageError(r && (r.stack || r.message) || r); });
 function fmt(s) { s = Math.round(s || 0); const m = Math.floor(s / 60), x = s % 60; return `${m}:${String(x).padStart(2, '0')}`; }
 function num(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n || 0); }
 function copy(id) { const el = $(id); el.select(); navigator.clipboard.writeText(el.value); }
@@ -664,7 +677,8 @@ function busyWhile(...names) {
       const ev = window.event;
       if (ev && ev === BUSY_EVENT) return f.apply(this, args);
       const b = ev && ev.type === 'click' && ev.target && ev.target.closest ? ev.target.closest('button') : null;
-      if (b && b.hasAttribute('data-job') && document.body.classList.contains('job-busy')) return;
+      if (b && b.hasAttribute('data-job') && document.body.classList.contains('job-busy'))  // was a silent no-op
+        return busyNote();
       if (b && b.classList.contains('pending')) return;  // still working on the last click
       if (b) b.classList.add('pending');
       let r;

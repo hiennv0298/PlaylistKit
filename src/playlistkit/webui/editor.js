@@ -473,7 +473,11 @@ window.edSeek = t => { ED.t = Math.max(0, Math.min(dur(), t)); if (ED.playing) {
   syncAudio(); renderStage(); renderTime(); };
 
 // ---------------------------------------------------------------- export
-window.edExport = async () => { await saveNow(); if (!dur()) return toast('The timeline is empty.');
+window.edExport = async () => {
+  if (document.body.classList.contains('job-busy')) return toast('PlaylistKit is already working. Wait for it to finish or press Stop.');
+  // something shows the moment Export is pressed, before the timeline is saved and the job starts
+  $('jobbar').hidden = false; $('jobLabel').textContent = 'Exporting the video'; $('jobStatus').textContent = 'Starting…'; $('jobErr').textContent = '';
+  await saveNow(); if (!dur()) return toast('The timeline is empty.');
   pause(); await startJob('/api/edit/export', {id: P.id, edit: ED.edit}); };
 window.edFrame = async () => {
   await saveNow(); const r = await api('/api/edit/frame', {id: P.id, edit: ED.edit, at: ED.t});

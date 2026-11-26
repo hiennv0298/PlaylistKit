@@ -882,6 +882,9 @@ class Handler(BaseHTTPRequestHandler):
             p = get_project(pid)
             editor.preview_frame(p, editor.clean_edit(p, body.get("edit") or {}), float(body.get("at") or 0))
             return {"url": f"/files/{p.id}/frame/frame-preview.png?t={time.time():.0f}"}
+        if path == "/api/clientlog":  # an error in the window (index.html pageError): keep it in the log
+            log(f"[window] {str(body.get('where') or '')} {str(body.get('msg') or '')[:600]}")
+            return {"ok": True}
         if path == "/api/edit/export":
             from playlistkit import editor
 

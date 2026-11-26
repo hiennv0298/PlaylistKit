@@ -3,6 +3,12 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.10
+
+- **Fixed: Export in the video editor seemed to do nothing.** While another job ran (Make MP4, for example), every button that starts a job ignored clicks without a word. Such a button now says which job is running and to wait for it or press Stop.
+- **Export answers at once:** the bar at the bottom shows "Exporting the video · Starting…" the moment you press it.
+- **Errors in the window are no longer silent.** They show in the bar at the bottom and are written to the app's log (`playlistkit-app.log`), so a button that fails says why.
+
 ## 0.2.9
 
 - **Export carries on after Stop.** The video editor now makes a long video in 5-minute parts and keeps each finished part. Export after **Stop** starts where it stopped instead of from the beginning.
