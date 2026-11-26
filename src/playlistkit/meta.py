@@ -117,13 +117,23 @@ def render_text(meta: dict) -> str:
 
 
 def credits_for(project: Project) -> list[str]:
-    """Licence lines for Creative Commons songs (CC BY requires credit)."""
+    """Credit lines for the Creative Commons songs in the playlist (CC BY needs title, author, source and
+    licence): '• "Title" by Artist, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), https://...'"""
+    from playlistkit.sources import licence
+
     rec = read_json(project.file("downloads.json"), {})
+    here = {f.name for f in project.song_files()}  # songs removed or cut since are not credited
     out = []
-    for info in rec.values():
-        if info.get("safety") == "cc" or "creativecommons" in str(info.get("license", "")):
-            who = f"{info.get('artist')} - {info.get('title')}".strip(" -")
-            out.append(f"• {who} — {info.get('license') or 'Creative Commons'} — {info.get('url', '')}".rstrip(" —"))
+    for name, info in rec.items():
+        if here and name not in here:
+            continue
+        lic = licence(str(info.get("license") or ""))
+        if not (lic.cc or info.get("safety") == "cc"):
+            continue
+        title, artist = str(info.get("title") or "").strip(), str(info.get("artist") or "").strip()
+        who = f'"{title}" by {artist}' if title and artist else (title or artist or name)
+        terms = f"{lic.label} ({lic.url})" if lic.cc else (info.get("license") or "Creative Commons")
+        out.append(", ".join(x for x in (f"• {who}", terms, str(info.get("url") or "")) if x))
     return out
 
 

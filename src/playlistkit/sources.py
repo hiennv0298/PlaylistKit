@@ -25,6 +25,7 @@ from playlistkit.util import AUDIO_EXT, PlaylistKitError, check_cancel, log
 
 UA = f"PlaylistKit/{__version__} (+https://github.com/hiennv0298/PlaylistKit)"
 SAFETY_SCORE = {"cc": 3.0, "artist": 2.0, "unknown": 1.0, "distributed": 0.0}
+NO_LICENCE = ("youtube", "audius")  # their songs carry no licence: never safe to monetize
 SOURCES = {
     "soundcloud": "SoundCloud",
     "youtube": "YouTube",
@@ -37,6 +38,60 @@ JUNK = re.compile(r"\b(karaoke|8d|beat|instrumental|type beat|1 hour|1 gio|playl
                   r"nonstop|full album|mashup|reaction|tutorial|hop am|tab)\b")
 SOFT_JUNK = re.compile(r"\b(remix|edm|house|vinahouse|nightcore|sped up|speed up|tiktok|bass boosted|phonk|"
                        r"lofi|lo fi|cover)\b")
+
+
+@dataclass(frozen=True)
+class Licence:
+    label: str      # "CC BY 4.0", "CC BY-NC-SA 3.0", "CC0", "all rights reserved"
+    url: str        # the licence's deed, for the credits
+    ok: bool        # allowed in a monetized remix: commercial use and changes are both allowed
+    why: str = ""   # why not, when ok is False
+    cc: bool = False
+
+
+_CC_URL = re.compile(r"creativecommons\.org/(licenses|publicdomain)/([a-z+\-]+)(?:/([\d.]+))?", re.I)
+_SC_LICENCE = {"cc-by": "by", "cc-by-sa": "by-sa", "cc-by-nc": "by-nc", "cc-by-nd": "by-nd", "cc-by-nc-sa": "by-nc-sa",
+               "cc-by-nc-nd": "by-nc-nd", "no-rights-reserved": "zero"}
+
+
+def licence(text: str) -> Licence:
+    """Read a licence from a Creative Commons URL, a SoundCloud licence code or a licence name.
+    Safe for a monetized channel: CC0, public domain, CC BY and CC BY-SA. Not safe: NC (no commercial
+    use), ND (no changes, and a remix changes the song), Sampling+, and anything else."""
+    t = (text or "").strip()
+    low = t.lower()
+    code, ver = None, ""
+    m = _CC_URL.search(low)
+    if m:
+        kind, code, ver = m.group(1), m.group(2).strip("-"), m.group(3) or ""
+        if kind == "publicdomain":
+            code = "zero" if code == "zero" else "pdm"
+    elif low in _SC_LICENCE:
+        code = _SC_LICENCE[low]
+    elif low in ("cc0", "cc0 1.0", "public domain"):
+        code = "zero" if low.startswith("cc0") else "pdm"
+    elif low.startswith("attribution") or low.startswith("creative commons attribution"):
+        parts = ["by"] + [p for p, words in (("nc", ("noncommercial", "non-commercial")), ("nd", ("noderiv", "no deriv")),
+                                             ("sa", ("share-alike", "sharealike", "share alike")))
+                          if any(w in low for w in words)]
+        code = "-".join(parts)
+    if code is None:
+        return Licence(t or "unknown", "", False, "no Creative Commons licence")
+    if code == "zero":
+        return Licence("CC0", "https://creativecommons.org/publicdomain/zero/1.0/", True, cc=True)
+    if code == "pdm":
+        return Licence("Public Domain", "https://creativecommons.org/publicdomain/mark/1.0/", True, cc=True)
+    if "sampling" in code:
+        return Licence(f"CC {code.title()}", f"https://creativecommons.org/licenses/{code}/{ver or '1.0'}/", False,
+                       "Sampling+: only for sampling, not the whole song", cc=True)
+    parts = code.split("-")
+    label = "CC " + code.upper() + (f" {ver}" if ver else "")
+    url = f"https://creativecommons.org/licenses/{code}/{ver or '4.0'}/"
+    if "nc" in parts:
+        return Licence(label, url, False, "NC: no commercial use", cc=True)
+    if "nd" in parts:
+        return Licence(label, url, False, "ND: no changes (a remix changes it)", cc=True)
+    return Licence(label, url, parts[0] == "by", "" if parts[0] == "by" else "unknown licence", cc=True)
 
 
 @dataclass
@@ -56,6 +111,8 @@ class Candidate:
     selected: bool = False
     skip: str = ""           # why it was filtered out
     score: float = 0.0
+    lic: str = ""            # the licence as people read it: "CC BY 4.0"
+    money: bool = False      # the licence allows a monetized remix (see licence())
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -133,13 +190,16 @@ class _SoundCloud:
                          (t.get("duration") or 0) / 1000, int(t.get("playback_count") or 0),
                          license=t.get("license") or "", safety=safety, flags=flags, genre=t.get("genre") or "")
 
-    def search(self, query: str, limit: int) -> list[Candidate]:
+    def search(self, query: str, limit: int, money_only: bool = False) -> list[Candidate]:
         out: list[Candidate] = []
-        data = self.api("/search/tracks", q=query, limit=min(limit, 100), offset=0, linked_partitioning=1)
+        extra = {"filter.license": "to_modify_commercially"} if money_only else {}
+        data = self.api("/search/tracks", q=query, limit=min(limit, 100), offset=0, linked_partitioning=1, **extra)
         for t in data.get("collection", []):
             c = self.candidate(t)
             if c:
                 out.append(c)
+        if money_only:  # user sets mix every licence: not worth the time here
+            return out
         # popular user-made sets give more variety than plain track search
         sets = self.api("/search/playlists_without_albums", q=query, limit=6, offset=0, linked_partitioning=1)
         for s in sorted(sets.get("collection", []), key=lambda s: -(s.get("likes_count") or 0))[:3]:
@@ -266,14 +326,20 @@ def jamendo_search(tags: list[str], query: str, limit: int, client_id: str) -> l
 
 # ---------------------------------------------------------------- Internet Archive
 
-def archive_search(tags: list[str], limit: int) -> list[Candidate]:
+def archive_search(tags: list[str], limit: int, money_only: bool = False) -> list[Candidate]:
     subj = " OR ".join(f'subject:"{t}"' for t in tags[:3]) or "subject:music"
-    q = f"mediatype:audio AND (collection:netlabels OR collection:opensource_audio) AND ({subj}) AND licenseurl:*creativecommons*"
+    # opensource_audio is open to any uploader, who sets the licence (commercial mixtapes marked CC turn up there);
+    # for monetizing only the netlabels collection counts: releases by labels that chose the licence
+    coll = "collection:netlabels" if money_only else "(collection:netlabels OR collection:opensource_audio)"
+    q = f"mediatype:audio AND {coll} AND ({subj}) AND licenseurl:*creativecommons*"
     data = http_json("https://archive.org/advancedsearch.php?" + _q({
-        "q": q, "fl[]": ["identifier", "title", "creator", "licenseurl", "downloads"], "rows": 12,
+        "q": q, "fl[]": ["identifier", "title", "creator", "licenseurl", "downloads"], "rows": 60 if money_only else 12,
         "sort[]": "downloads desc", "output": "json"}))
     out: list[Candidate] = []
-    for doc in (data.get("response") or {}).get("docs") or []:  # type: ignore[union-attr]
+    docs = (data.get("response") or {}).get("docs") or []  # type: ignore[union-attr]
+    if money_only:  # the licence is on the album: skip NC / ND albums before reading their files
+        docs = [d for d in docs if licence(str(d.get("licenseurl") or "")).ok][:12]
+    for doc in docs:
         check_cancel()
         ident = doc.get("identifier")
         if not ident:
@@ -314,7 +380,9 @@ def archive_search(tags: list[str], limit: int) -> list[Candidate]:
 def ccmixter_search(tags: list[str], limit: int) -> list[Candidate]:
     out: list[Candidate] = []
     for tag in (tags[:3] or ["chill"]):  # ccMixter ANDs tags, so ask one tag at a time
-        data = http_json("https://ccmixter.org/api/query?" + _q({"f": "json", "tags": tag, "limit": min(limit, 60),
+        # f=js, not f=json: json also repeats the whole answer in an X-JSON header, and past ~18 songs that
+        # header is longer than Python accepts (64 KB), so every ccMixter search failed
+        data = http_json("https://ccmixter.org/api/query?" + _q({"f": "js", "tags": tag, "limit": min(limit, 60),
                                                                   "sort": "rank"}))
         for u in data if isinstance(data, list) else []:
             files = [f for f in u.get("files") or [] if str(f.get("download_url", "")).lower().endswith(".mp3")]
@@ -351,10 +419,11 @@ def local_folder(folder: Path) -> list[Candidate]:
 # ---------------------------------------------------------------- search + pick
 
 def search(genre: Genre, sources: list[str], want: int, settings: dict, extra: str = "",
-           progress: Callable[[str], None] = log) -> list[Candidate]:
-    """Collect candidates from the chosen sources. `extra` is a custom query, a set/playlist URL or a folder."""
+           progress: Callable[[str], None] = log, money_only: bool = False) -> list[Candidate]:
+    """Collect candidates from the chosen sources. `extra` is a custom query, a set/playlist URL or a folder.
+    money_only: look only where licences allow a monetized remix (pick() then drops the rest)."""
     found: list[Candidate] = []
-    per = max(30, want * 3)
+    per = max(30, want * 3) * (3 if money_only else 1)  # many Creative Commons songs are NC or ND
     extra = extra.strip().strip('"')
     if extra:
         if Path(extra).is_dir():
@@ -368,14 +437,19 @@ def search(genre: Genre, sources: list[str], want: int, settings: dict, extra: s
             return youtube_playlist(extra)
     queries = [extra] if extra else list(genre.queries)
     sc = None
+    if money_only:
+        skipped = [SOURCES[s] for s in sources if s in NO_LICENCE]
+        if skipped:
+            progress(f"   Skipping {', '.join(skipped)}: songs there have no licence that allows monetizing")
+        sources = [s for s in sources if s not in NO_LICENCE]
     for src in sources:
         check_cancel()
         try:
             if src == "soundcloud":
                 sc = sc or _SoundCloud()
                 for q in queries[:3]:
-                    progress(f"SoundCloud: searching '{q}'")
-                    found += sc.search(q, per)
+                    progress(f"SoundCloud: searching '{q}'" + (" (licence allows commercial changes)" if money_only else ""))
+                    found += sc.search(q, min(per, 100), money_only)
             elif src == "youtube":
                 for q in queries[:3]:
                     progress(f"YouTube: searching '{q}'")
@@ -390,7 +464,7 @@ def search(genre: Genre, sources: list[str], want: int, settings: dict, extra: s
                                         settings.get("jamendo_client_id", ""))
             elif src == "archive":
                 progress(f"Internet Archive: {', '.join(genre.tags[:3])}")
-                found += archive_search(list(genre.tags), per)
+                found += archive_search(list(genre.tags), per, money_only)
             elif src == "ccmixter":
                 progress(f"ccMixter: {', '.join(genre.tags[:2])}")
                 found += ccmixter_search(list(genre.tags), per)
@@ -402,14 +476,47 @@ def search(genre: Genre, sources: list[str], want: int, settings: dict, extra: s
     return found
 
 
+# on SoundCloud, a CC licence on a remix / cover covers only the remixer's part, never the original song
+# (ccMixter remixes are different: they are built from Creative Commons stems)
+_NOT_THEIRS = re.compile(r"\b(remix|rmx|cover|bootleg|flip|mashup|edit|rework|vip mix|nightcore|sped up|slowed)\b", re.I)
+
+
+def money_skip(c: Candidate) -> str:
+    """Why a song cannot go into a monetized remix ('' when it can). Your own files are your call."""
+    if c.source == "local":
+        return ""
+    lic = licence(c.license)
+    if not lic.ok:
+        return f"licence: {lic.why}"
+    if c.source == "soundcloud" and (c.safety != "artist" or c.flags):
+        return "licence set by someone who may not own the song"
+    if c.source == "soundcloud" and _NOT_THEIRS.search(f"{c.artist} {c.title}"):
+        return "remix or cover: the original song is not theirs to license"
+    return ""
+
+
+def song_rights(info: dict) -> dict:
+    """{'lic', 'money'} for a downloaded song (download.song_info). Your own files: money is None (your call)."""
+    if (info.get("source") or "local") == "local":
+        return {"lic": "your file", "money": None}
+    c = Candidate(info["source"], "", info.get("url", ""), info.get("artist", ""), info.get("title", ""),
+                  license=info.get("license", ""), safety=info.get("safety", "unknown"))
+    lic = licence(c.license)
+    return {"lic": lic.label if lic.cc else "no licence", "money": not money_skip(c)}
+
+
 def pick(cands: list[Candidate], genre: Genre, want: int, backlog: Backlog, banned: list[str],
-         allow_used_artists: bool = False, allow_distributed: bool = False) -> list[Candidate]:
-    """Filter and rank; the best `want` songs are pre-selected, one per artist."""
+         allow_used_artists: bool = False, allow_distributed: bool = False, money_only: bool = False) -> list[Candidate]:
+    """Filter and rank; the best `want` songs are pre-selected, one per artist.
+    money_only: only songs whose licence allows a monetized remix (CC BY, CC BY-SA, CC0, public domain)."""
     soft = genre.style in ("indie", "lofi")
     banned_set = backlog.banned_artists(banned)
     seen_ids: set[str] = set()
     best_by_title: dict[str, Candidate] = {}
     for c in cands:
+        lic = licence(c.license)
+        c.lic = "your file" if c.source == "local" else (lic.label if lic.cc else "")
+        c.money = not money_skip(c) and c.source != "local"
         uid = f"{c.source}:{c.sid}"
         if uid in seen_ids:
             c.skip = "duplicate"
@@ -429,6 +536,8 @@ def pick(cands: list[Candidate], genre: Genre, want: int, backlog: Backlog, bann
             c.skip = backlog.check(c.artist, c.title, allow_used_artists, banned_set)
         if not c.skip and c.safety == "distributed" and not allow_distributed and genre.risk != "high":
             c.skip = "distributed release (Content ID likely)"
+        if not c.skip and money_only:
+            c.skip = money_skip(c)
         c.score = SAFETY_SCORE.get(c.safety, 1.0) + min(math.log10(c.plays + 10), 6.0) / 2
         prev = best_by_title.get(t)
         if not c.skip and prev and not prev.skip:

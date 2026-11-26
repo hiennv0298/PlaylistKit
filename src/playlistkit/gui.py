@@ -35,7 +35,7 @@ SERVER_FILE = "app-server.json"
 DEFAULTS = {"projects_dir": str(default_projects_dir()), "backlog_path": "", "banned_artists": "",
             "jamendo_client_id": "", "ai_python": "", "device": "cuda", "low_priority": True,
             "check_updates": True, "sources": "soundcloud,audius,jamendo,archive,ccmixter", "count": 30,
-            "allow_used_artists": False, "video_res": "720p"}
+            "allow_used_artists": False, "money_only": False, "video_res": "720p"}
 SERVER: ThreadingHTTPServer | None = None
 IDLE_EXIT = 150
 MEDIA_TYPES = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav", ".ogg": "audio/ogg",
@@ -187,12 +187,13 @@ def _frac(i: int, n: int) -> None:
 
 # ---------------------------------------------------------------- jobs
 
-def job_find(pid: str, sources: list[str], count: int, extra: str, allow_used: bool) -> dict:
+def job_find(pid: str, sources: list[str], count: int, extra: str, allow_used: bool, money_only: bool = False) -> dict:
     from playlistkit import sources as src
 
     p = get_project(pid)
     g = GENRES[p.genre]
-    log(f"Searching {', '.join(src.SOURCES.get(s, s) for s in sources)} for {count} {g.name} songs")
+    log(f"Searching {', '.join(src.SOURCES.get(s, s) for s in sources)} for {count} {g.name} songs"
+        + (", only music you can monetize (CC BY, CC BY-SA, CC0)" if money_only else ""))
     steps = {"n": 0}
 
     def progress(msg: str) -> None:
@@ -200,9 +201,12 @@ def job_find(pid: str, sources: list[str], count: int, extra: str, allow_used: b
         steps["n"] += 1
         STATE.set(min(0.95, steps["n"] / (len(sources) * 6 + 2)), msg)
 
-    cands = src.search(g, sources, count, load_settings(), extra, progress)
+    cands = src.search(g, sources, count, load_settings(), extra, progress, money_only)
     picked = src.pick(cands, g, count, backlog(), banned(), allow_used_artists=allow_used,
-                      allow_distributed=bool(extra))
+                      allow_distributed=bool(extra), money_only=money_only)
+    if money_only and not any(c.selected for c in picked):
+        log("No song with a licence that allows monetizing was found. Try other sources (add a Jamendo client ID "
+            "in Settings), other search words, or more songs.")
     write_json(p.file("candidates.json"), [c.to_dict() for c in picked])
     n_sel = sum(c.selected for c in picked)
     n_ok = sum(not c.skip for c in picked)
@@ -388,6 +392,7 @@ def job_install_ai() -> dict:
 
 def project_detail(pid: str) -> dict:
     from playlistkit.download import song_info
+    from playlistkit.sources import song_rights
 
     p = get_project(pid)
     screen = read_json(p.file("screen.json"), {})
@@ -395,7 +400,7 @@ def project_detail(pid: str) -> dict:
     for f in p.song_files():
         info = song_info(p, f)
         sc = screen.get(f.name, {})
-        songs.append({"file": f.name, **info, "duration": sc.get("duration", 0), "sub_db": sc.get("sub_db"),
+        songs.append({"file": f.name, **info, **song_rights(info), "duration": sc.get("duration", 0), "sub_db": sc.get("sub_db"),
                       "cutoff_khz": sc.get("cutoff_khz"), "flags": sc.get("flags", []),
                       "checked": f.name in screen})
     meta_path = p.out / "youtube_meta.txt"
@@ -720,13 +725,14 @@ class Handler(BaseHTTPRequestHandler):
             return {"ok": True}
         if path == "/api/find":
             s = save_settings({"count": body.get("count", 30), "sources": ",".join(body.get("sources") or []),
-                               "allow_used_artists": bool(body.get("allow_used_artists"))})
+                               "allow_used_artists": bool(body.get("allow_used_artists")),
+                               "money_only": bool(body.get("money_only"))})
             sources = [x for x in s["sources"].split(",") if x]
             if not sources and not body.get("extra"):
                 raise PlaylistKitError("Pick at least one source.")
             get_project(pid)
             start_job("finding", "Searching for songs", pid, job_find, pid, sources, s["count"],
-                      str(body.get("extra") or ""), s["allow_used_artists"])
+                      str(body.get("extra") or ""), s["allow_used_artists"], s["money_only"])
             return {"ok": True}
         if path == "/api/candidates":
             p = get_project(pid)

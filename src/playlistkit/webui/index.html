@@ -198,6 +198,8 @@
           <label class="chk" style="margin-top:18px"><input type="checkbox" id="fUsedArtists"> allow artists used before</label>
           <button class="btn primary" style="margin-top:18px" data-job onclick="findSongs()">Find songs</button>
         </div>
+        <label class="chk" style="margin-top:12px"><input type="checkbox" id="fMoney" onchange="moneyMode()"> <b>Only music I can monetize</b>
+          <span class="muted small">CC BY, CC BY-SA and CC0 from Jamendo, Internet Archive, ccMixter, and artists' own SoundCloud uploads. No NC (no commercial use) or ND (no changes). YouTube and Audius are skipped: their songs have no such licence.</span></label>
         <div class="note warn small" id="pRisk" style="margin-top:12px"></div>
       </div>
 
@@ -444,7 +446,7 @@ async function openProject(id) {
   $('pRisk').textContent = P.risk_text;
   const srcs = (G.genres.find(g => g.id === P.genre) || {}).sources || (S.sources || '').split(',');
   document.querySelectorAll('.src').forEach(c => c.checked = srcs.includes(c.value));
-  $('fCount').value = S.count || 30; $('fUsedArtists').checked = !!S.allow_used_artists;
+  $('fCount').value = S.count || 30; $('fUsedArtists').checked = !!S.allow_used_artists; $('fMoney').checked = !!S.money_only; moneyMode();
   const g = G.genres.find(g => g.id === P.genre);
   djFillOnce(); djShow(); renderDemo();
   renderCands(); renderSongs(); renderMix(); renderMeta(); tab(CUR_TAB);
@@ -487,9 +489,16 @@ function tab(t) { CUR_TAB = t; document.querySelectorAll('.tab').forEach(x => x.
 async function updateProject(ch) { await api('/api/project/update', {id: P.id, ...ch}); refresh(); }
 async function deleteProject() { if (!confirm(`Move the playlist "${P.name}" and its files to the Recycle Bin?`)) return;
   await api('/api/project/delete', {id: P.id}); goHome(); }
+const NO_LICENCE = ['youtube', 'audius'];
+function moneyMode() {  // sources whose songs never carry a usable licence are off while the switch is on
+  const on = $('fMoney').checked;
+  document.querySelectorAll('.src').forEach(c => { const off = on && NO_LICENCE.includes(c.value);
+    c.disabled = off; c.closest('label').style.opacity = off ? .45 : ''; c.closest('label').title = off ? 'No licence that allows monetizing' : ''; });
+}
 function findSongs() {
-  const sources = [...document.querySelectorAll('.src:checked')].map(x => x.value);
-  return startJob('/api/find', {id: P.id, sources, count: +$('fCount').value, extra: $('fExtra').value, allow_used_artists: $('fUsedArtists').checked});
+  const money = $('fMoney').checked;
+  const sources = [...document.querySelectorAll('.src:checked')].map(x => x.value).filter(s => !(money && NO_LICENCE.includes(s)));
+  return startJob('/api/find', {id: P.id, sources, count: +$('fCount').value, extra: $('fExtra').value, allow_used_artists: $('fUsedArtists').checked, money_only: money});
 }
 function renderCands() {
   const c = P.candidates || []; $('candBox').hidden = !c.length; if (!c.length) return;
@@ -498,7 +507,8 @@ function renderCands() {
   $('candRows').innerHTML = rows.map(x => { const uid = x.source + ':' + x.sid, [cls, label] = SAFETY[x.safety] || ['', x.safety];
     return `<tr class="${x.skip ? 'skip' : ''}"><td><input type="checkbox" class="cand" value="${esc(uid)}" ${x.selected ? 'checked' : ''} onchange="saveSel()"></td>
     <td class="ell"><b>${esc(x.artist)}</b> — ${esc(x.title)}</td><td>${esc(x.source)}</td>
-    <td><span class="badge ${cls}" title="${esc((x.flags || []).join(', ') + ' ' + (x.license || ''))}">${label}</span></td>
+    <td><span class="badge ${cls}" title="${esc((x.flags || []).join(', ') + ' ' + (x.license || ''))}">${label}</span>
+      ${x.lic && x.source !== 'local' ? `<span class="badge ${x.money ? 'ok' : 'warn'}" title="${x.money ? 'This licence allows a monetized remix' : 'This licence does not allow a monetized remix'}">${esc(x.lic)}${x.money ? ' · $ ok' : ''}</span>` : ''}</td>
     <td>${fmt(x.duration)}</td><td>${num(x.plays)}</td>
     <td class="small faint">${esc(x.skip)} ${x.url && x.url.startsWith('http') ? `<a href="#" onclick="api('/api/link',{url:'${esc(x.url)}'});return false">open</a>` : ''}</td></tr>`; }).join('');
 }
@@ -508,7 +518,10 @@ async function saveSel() { const sel = [...document.querySelectorAll('.cand:chec
 async function downloadSel() { await saveSel(); await startJob('/api/download', {id: P.id}); }
 function renderSongs() {
   const s = P.song_list || []; const total = s.reduce((a, x) => a + (x.duration || 0), 0);
-  $('songInfo').textContent = `${s.length} songs · about ${Math.round(total / 60)} min before mixing`;
+  const bad = s.filter(x => x.money === false), own = s.filter(x => x.money === null);
+  $('songInfo').innerHTML = esc(`${s.length} songs · about ${Math.round(total / 60)} min before mixing`) + (s.length ? ' · ' + (bad.length
+    ? `<span class="flag warn" title="${esc(bad.map(x => x.file + ': ' + x.lic).join('\n'))}">${bad.length} without a licence that allows monetizing</span>`
+    : `<span class="flag" style="color:var(--ok)">all can be monetized${own.length ? ` (${own.length} are your own files)` : ''}</span>`) : '');
   $('songRows').innerHTML = s.map(x => { const worst = (x.flags || []).some(f => f.level === 'bad') ? 'bad' : (x.flags || []).length ? 'warn' : '';
     return `<tr><td class="ell"><a href="#" onclick="playSong('${encodeURIComponent(x.file)}');return false" title="Play">▶</a> ${esc(x.file)}</td>
     <td>${x.duration ? fmt(x.duration) : ''}</td><td>${x.sub_db != null ? x.sub_db + ' dB' : ''}</td>

@@ -3,6 +3,16 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.7
+
+- **Only music I can monetize** (Songs tab). Finds only songs whose licence allows a monetized remix: CC BY, CC BY-SA, CC0 and public domain.
+  - Left out: **NC** (no commercial use), **ND** (no changes, and a remix changes the song), Sampling+, songs with no licence, and SoundCloud remixes and covers of other people's songs.
+  - YouTube and Audius are skipped: their songs carry no such licence.
+  - Internet Archive is searched only in its netlabels collection, because anyone can upload to the open collection and choose any licence. Commercial mixtapes marked CC turned up there.
+- **Every song shows its licence** in the search results, with **$ ok** when it can be monetized. The Songs list says how many songs cannot be monetized.
+- **Better credits in the YouTube description:** each Creative Commons song is credited with its title, artist, licence, a link to the licence and its page, as CC BY asks. Songs removed since are no longer credited.
+- **Fixed: ccMixter search always failed** ("got more than 65536 bytes when reading header line").
+
 ## 0.2.6
 
 - **Better thumbnails, without the length.**
