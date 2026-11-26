@@ -3,6 +3,12 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.11
+
+- **Fixed: the bar at the bottom stayed at "100%" with a Stop button after a job had finished.** This happened when the bar had been closed with ✕ before, or when the job was started from another window. A running job is now always shown and ends with "Done.".
+- **The bar closes by itself** 8 seconds after a job finished well. Errors and Stopped stay until you close them.
+- **Fixed: credits said "CC PUBLICDOMAIN"** with a dead link for songs under the old Creative Commons public domain dedication. They now say "Public Domain" with its real link.
+
 ## 0.2.10
 
 - **Fixed: Export in the video editor seemed to do nothing.** While another job ran (Make MP4, for example), every button that starts a job ignored clicks without a word. Such a button now says which job is running and to wait for it or press Stop.

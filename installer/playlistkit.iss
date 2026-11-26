@@ -2,7 +2,7 @@
 ; Installs per user (no admin) into %LOCALAPPDATA%\Programs\PlaylistKit.
 
 #ifndef AppVersion
-  #define AppVersion "0.2.10"
+  #define AppVersion "0.2.11"
 #endif
 
 [Setup]

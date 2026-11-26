@@ -81,6 +81,8 @@ def licence(text: str) -> Licence:
         return Licence("CC0", "https://creativecommons.org/publicdomain/zero/1.0/", True, cc=True)
     if code == "pdm":
         return Licence("Public Domain", "https://creativecommons.org/publicdomain/mark/1.0/", True, cc=True)
+    if code == "publicdomain":  # the old CC Public Domain Dedication (licenses/publicdomain/), before CC0
+        return Licence("Public Domain", "https://creativecommons.org/licenses/publicdomain/", True, cc=True)
     if "sampling" in code:
         return Licence(f"CC {code.title()}", f"https://creativecommons.org/licenses/{code}/{ver or '1.0'}/", False,
                        "Sampling+: only for sampling, not the whole song", cc=True)

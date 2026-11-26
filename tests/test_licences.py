@@ -12,6 +12,7 @@ from playlistkit.util import write_json
     ("https://creativecommons.org/licenses/by-sa/4.0/", "CC BY-SA 4.0", True),
     ("https://creativecommons.org/publicdomain/zero/1.0/", "CC0", True),
     ("http://creativecommons.org/publicdomain/mark/1.0/", "Public Domain", True),
+    ("http://creativecommons.org/licenses/publicdomain/", "Public Domain", True),
     ("http://creativecommons.org/licenses/by-nc-sa/3.0/", "CC BY-NC-SA 3.0", False),
     ("http://creativecommons.org/licenses/by-nd/4.0/", "CC BY-ND 4.0", False),
     ("http://creativecommons.org/licenses/sampling+/1.0/", None, False),

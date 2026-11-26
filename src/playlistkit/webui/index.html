@@ -713,6 +713,9 @@ async function poll(now) {
   clearTimeout(pollTimer);
   try {
     const s = await api('/api/state');
+    // a running job is always shown, also one started in another window; before, a bar closed earlier with ✕
+    // stopped updating, so it stayed at "100%" with a Stop button after the job had finished
+    if (s.busy) { JOB_HIDDEN = false; clearTimeout(HIDE_TIMER); }
     if (s.busy || (s.phase !== 'idle' && !JOB_HIDDEN)) {
       $('jobbar').hidden = false; $('jobLabel').textContent = s.label; $('jobStatus').textContent = s.status;
       $('jobBar').style.width = s.progress + '%'; $('jobStop').hidden = !s.busy; $('jobClose').hidden = s.busy;
@@ -720,7 +723,7 @@ async function poll(now) {
       if (!$('log').hidden) { $('log').textContent = s.log.join('\n'); $('log').scrollTop = 1e9; }
     }
     if (LAST_PHASE === 'busy' && !s.busy) {  // a job just ended
-      if (s.phase === 'done') { if (P) refresh(); else goHome(); if (s.label === 'Installing the AI runtime') openSettings(); }
+      if (s.phase === 'done') { if (P) refresh(); else goHome(); if (s.label === 'Installing the AI runtime') openSettings(); hideSoon(); }
       if (window.edOnJobDone) edOnJobDone();
       else if (P) refresh();
     }
@@ -731,6 +734,10 @@ async function poll(now) {
 }
 function toggleLog() { $('log').hidden = !$('log').hidden; poll(true); }
 function closeJob() { JOB_HIDDEN = true; $('jobbar').hidden = true; $('jobErr').textContent = ''; }
+// a job that finished well shows "Done." for a moment, then the bar closes; errors and Stopped stay until ✕
+let HIDE_TIMER = null;
+function hideSoon() { clearTimeout(HIDE_TIMER);
+  HIDE_TIMER = setTimeout(() => { if (!document.body.classList.contains('job-busy') && $('log').hidden && !$('jobErr').textContent) closeJob(); }, 8000); }
 
 // ---------------------------------------------------------------- settings
 async function openSettings() {
