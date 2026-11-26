@@ -15,6 +15,7 @@ FFmpeg filter graph that draws exactly these layers.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -312,22 +313,64 @@ def _xy(pos: str, margin: str = "h*0.05") -> tuple[str, str]:
     return x, y
 
 
-def build_export(p: Project, edit: dict, out: Path, tmp: Path) -> tuple[list[str], float, int]:
-    """FFmpeg command for the edit. Returns (cmd, duration, fps)."""
+def export_fps(p: Project, edit: dict) -> int:
+    """25 fps for video clips and slow zoom, 15 fps is smooth enough for a sound wave, 2 fps for still pictures."""
+    if any(kind_of(resolve(p, c["media"])) == "video" or c["zoom"] for c in edit["video"]):
+        return 25
+    if any(o["kind"] == "wave" for o in edit["overlay"]):
+        return 15
+    return 2
+
+
+def _audio_graph(p: Project, edit: dict, t0: float, t1: float, add_input) -> list[str]:
+    """The audio clips mixed into [amix], for the part [t0, t1] of the timeline (times inside start at 0)."""
+    span = t1 - t0
+    graph, labels = [], []
+    for i, c in enumerate(edit["audio"]):
+        a, b = max(c["start"], t0), min(c["start"] + c["dur"], t1)
+        if b - a <= 1e-3:
+            continue
+        off = a - c["start"]  # how far into the clip this part starts
+        idx = add_input(["-ss", f"{c['in'] + off:.3f}", "-t", f"{b - a:.3f}", "-i", str(resolve(p, c["media"]))])
+        chain = f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,volume={c['volume']:.3f}"
+        fi, fo = c["fade_in"], c["fade_out"]
+        if fi > 0 and off == 0:
+            chain += f",afade=t=in:st=0:d={fi:.2f}"
+        elif fi > off:  # this part starts inside the fade in
+            chain += f",volume='min(1,(t+{off:.3f})/{fi:.3f})':eval=frame"
+        if fo > 0:
+            st = c["dur"] - fo - off  # where the fade out starts, in this part's time
+            if st >= 0:
+                chain += f",afade=t=out:st={st:.3f}:d={fo:.2f}"
+            else:
+                chain += f",volume='max(0,({c['dur'] - off:.3f}-t)/{fo:.3f})':eval=frame"
+        delay = int(round((a - t0) * 1000))
+        chain += f",adelay={delay}|{delay}[a{i}]"
+        graph.append(chain)
+        labels.append(f"[a{i}]")
+    if labels:
+        graph.append("".join(labels) + f"amix=inputs={len(labels)}:normalize=0:duration=longest,"
+                     f"apad,atrim=0:{span:.3f}[amix]")
+    else:
+        graph.append(f"anullsrc=r=48000:cl=stereo,atrim=0:{span:.3f}[amix]")
+    return graph
+
+
+def build_export(p: Project, edit: dict, out: Path, tmp: Path, t0: float = 0.0, t1: float | None = None,
+                 mode: str = "full") -> tuple[list[str], float, int]:
+    """FFmpeg command for the edit. Returns (cmd, duration of the whole timeline, fps).
+
+    t0, t1: only this part of the timeline (the exported file starts at t0). mode: 'full' video + audio,
+    'video' the picture only (a part of a long export), 'audio' the sound only."""
     ff = find_ffmpeg()
     w, h = RESOLUTIONS[edit["res"]]
     total = duration(edit)
     if total <= 0:
         raise PlaylistKitError("The timeline is empty: drag media from the left onto the tracks.")
-    # 25 fps for video clips and slow zoom, 15 fps is smooth enough for a sound wave, 2 fps for still pictures
-    if any(kind_of(resolve(p, c["media"])) == "video" or c["zoom"] for c in edit["video"]):
-        fps = 25
-    elif any(o["kind"] == "wave" for o in edit["overlay"]):
-        fps = 15
-    else:
-        fps = 2
+    fps = export_fps(p, edit)
+    t1 = total if t1 is None else min(t1, total)
+    span = t1 - t0
     inputs: list[str] = []
-    graph: list[str] = [f"color=c=black:s={w}x{h}:r={fps}:d={total:.3f}[base0]"]
     n_in = 0
 
     def add_input(args: list[str]) -> int:
@@ -336,19 +379,37 @@ def build_export(p: Project, edit: dict, out: Path, tmp: Path) -> tuple[list[str
         n_in += 1
         return n_in - 1
 
+    def part(start: float, dur: float) -> tuple[float, float, float] | None:
+        """(offset into the item, where it starts in this part, length) of what shows in [t0, t1]."""
+        a, b = max(start, t0), min(start + dur, t1)
+        return (a - start, a - t0, b - a) if b - a > 1e-3 else None
+
+    if mode == "audio":
+        graph = _audio_graph(p, edit, t0, t1, add_input)
+        cmd = [str(ff.ffmpeg), "-hide_banner", "-loglevel", "error", "-y", "-progress", "pipe:1", "-nostats", *inputs,
+               "-filter_complex", ";".join(graph), "-map", "[amix]", "-c:a", "aac", "-b:a", "384k", "-ar", "48000",
+               "-t", f"{span:.3f}", str(out)]
+        return cmd, total, fps
+
+    graph = [f"color=c=black:s={w}x{h}:r={fps}:d={span:.3f}[base0]"]
     last = "base0"
     for i, c in enumerate(edit["video"]):
+        cut = part(c["start"], c["dur"])
+        if not cut:
+            continue
+        off, at, length = cut
         src = resolve(p, c["media"])
         kind = kind_of(src)
         if kind == "image":
-            idx = add_input(["-loop", "1", "-framerate", str(fps), "-t", f"{c['dur']:.3f}", "-i", str(src)])
+            idx = add_input(["-loop", "1", "-framerate", str(fps), "-t", f"{length:.3f}", "-i", str(src)])
         else:
-            idx = add_input(["-ss", f"{c['in']:.3f}", "-t", f"{c['dur']:.3f}", "-i", str(src)])
+            idx = add_input(["-ss", f"{c['in'] + off:.3f}", "-t", f"{length:.3f}", "-i", str(src)])
         v = f"[{idx}:v]fps={fps},format=rgba"
         if c["zoom"] and kind == "image":
             frames = max(1, int(c["dur"] * fps))
+            first = f"+{int(round(off * fps))}" if off else ""  # the zoom carries on from where the last part ended
             v += (f",scale={w * 2}:{h * 2}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 2},"
-                  f"zoompan=z='1+0.12*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={w}x{h}:fps={fps}")
+                  f"zoompan=z='1+0.12*(on{first})/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={w}x{h}:fps={fps}")
             graph.append(f"{v}[v{i}a]")
         elif c["fit"] == "fill":
             graph.append(f"{v},scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}[v{i}a]")
@@ -361,40 +422,27 @@ def build_export(p: Project, edit: dict, out: Path, tmp: Path) -> tuple[list[str
                          f"boxblur=20:2,eq=brightness=-0.08[b{i}]")
             graph.append(f"[fg{i}]scale={w}:{h}:force_original_aspect_ratio=decrease[f{i}]")
             graph.append(f"[b{i}][f{i}]overlay=(W-w)/2:(H-h)/2[v{i}a]")
-        graph.append(f"[v{i}a]setpts=PTS-STARTPTS+{c['start']:.3f}/TB[v{i}]")
-        end = c["start"] + c["dur"]
-        graph.append(f"[{last}][v{i}]overlay=eof_action=pass:enable='between(t,{c['start']:.3f},{end:.3f})'[base{i + 1}]")
+        graph.append(f"[v{i}a]setpts=PTS-STARTPTS+{at:.3f}/TB[v{i}]")
+        graph.append(f"[{last}][v{i}]overlay=eof_action=pass:enable='between(t,{at:.3f},{at + length:.3f})'[base{i + 1}]")
         last = f"base{i + 1}"
 
     # audio first: the wave overlay needs the mixed audio
-    a_labels = []
-    for i, c in enumerate(edit["audio"]):
-        src = resolve(p, c["media"])
-        idx = add_input(["-ss", f"{c['in']:.3f}", "-t", f"{c['dur']:.3f}", "-i", str(src)])
-        chain = f"[{idx}:a]aresample=48000,aformat=channel_layouts=stereo,volume={c['volume']:.3f}"
-        if c["fade_in"] > 0:
-            chain += f",afade=t=in:st=0:d={c['fade_in']:.2f}"
-        if c["fade_out"] > 0:
-            chain += f",afade=t=out:st={max(0.0, c['dur'] - c['fade_out']):.3f}:d={c['fade_out']:.2f}"
-        delay = int(round(c["start"] * 1000))
-        chain += f",adelay={delay}|{delay}[a{i}]"
-        graph.append(chain)
-        a_labels.append(f"[a{i}]")
-    if a_labels:
-        graph.append("".join(a_labels) + f"amix=inputs={len(a_labels)}:normalize=0:duration=longest,"
-                     f"apad,atrim=0:{total:.3f}[amix]")
-    else:
-        graph.append(f"anullsrc=r=48000:cl=stereo,atrim=0:{total:.3f}[amix]")
-    waves = [o for o in edit["overlay"] if o["kind"] == "wave"]
-    if waves:
-        graph.append(f"[amix]asplit={len(waves) + 1}[aout]" + "".join(f"[aw{i}]" for i in range(len(waves))))
-    else:
-        graph.append("[amix]anull[aout]")
+    waves = [o for o in edit["overlay"] if o["kind"] == "wave" and part(o["start"], o["dur"])]
+    # showwaves sends its first picture only ~0.2 s into its audio: a part that starts later in the timeline
+    # feeds it a second of audio before the part (a whole number of frames) and drops those pictures
+    pre = round(min(1.0, t0) * fps) / fps if (mode == "video" and waves) else 0.0
+    if mode == "full" or waves:
+        graph += _audio_graph(p, edit, t0 - pre, t1, add_input)
+        outs = (["[aout]"] if mode == "full" else []) + [f"[aw{i}]" for i in range(len(waves))]
+        graph.append(f"[amix]asplit={len(outs)}" + "".join(outs) if len(outs) > 1 else f"[amix]anull{outs[0]}")
 
     font = _font()
     tmp.mkdir(parents=True, exist_ok=True)
     text_n = 0
     for j, o in enumerate(edit["overlay"]):
+        cut = part(o["start"], o["dur"])
+        if not cut:
+            continue
         a, b = o["start"], o["start"] + o["dur"]
         fs = max(8, int(h * o["size"] / 100))
         color = o["color"].lstrip("#")
@@ -409,7 +457,8 @@ def build_export(p: Project, edit: dict, out: Path, tmp: Path) -> tuple[list[str
                          for s, e, name in song_titles(p, edit) if min(b, e) - max(a, s) > 0.5]
             x, y = _xy(o["pos"])
             for s, e, text in items:
-                if not text.strip():
+                s, e = max(s, t0) - t0, min(e, t1) - t0
+                if e - s <= 1e-3 or not text.strip():
                     continue
                 tf = tmp / f"text{text_n}.txt"
                 tf.write_text(strip_emoji(text), encoding="utf-8")
@@ -420,21 +469,25 @@ def build_export(p: Project, edit: dict, out: Path, tmp: Path) -> tuple[list[str
                              f"fontcolor=0x{color}:x={x}:y={y}{box}:enable='between(t,{s:.3f},{e:.3f})'[t{text_n}]")
                 last = f"t{text_n}"
         elif o["kind"] == "progress":
+            _, at, length = cut
             bar_h = max(3, int(h * o["size"] / 100 / 4))
             y = "0" if o["pos"].startswith("top") else f"{h - bar_h}"
-            graph.append(f"color=c=0x{color}:s={w}x{bar_h}:r={fps}:d={total:.3f},format=rgba,colorchannelmixer=aa=0.85[pb{j}]")
-            graph.append(f"[{last}][pb{j}]overlay=x='-{w}+{w}*(t-{a:.3f})/{o['dur']:.3f}':y={y}:eof_action=pass:"
-                         f"enable='between(t,{a:.3f},{b:.3f})'[p{j}]")
+            now = f"(t+{t0 - a:.3f})" if t0 != a else f"(t-{a:.3f})"  # time since the bar started
+            graph.append(f"color=c=0x{color}:s={w}x{bar_h}:r={fps}:d={span:.3f},format=rgba,colorchannelmixer=aa=0.85[pb{j}]")
+            graph.append(f"[{last}][pb{j}]overlay=x='-{w}+{w}*{now}/{o['dur']:.3f}':y={y}:eof_action=pass:"
+                         f"enable='between(t,{at:.3f},{at + length:.3f})'[p{j}]")
             last = f"p{j}"
         elif o["kind"] == "wave":
+            _, at, length = cut
             k = waves.index(o)
             wh = max(20, int(h * o["size"] / 100 * 2.5))
             ww = int(w * 0.9)
-            graph.append(f"[aw{k}]showwaves=s={ww}x{wh}:mode=cline:rate={fps}:colors=0x{color}@0.85,format=rgba[wv{j}]")
+            warm = f",trim=start={pre:.6f},setpts=PTS-STARTPTS" if pre else ""
+            graph.append(f"[aw{k}]showwaves=s={ww}x{wh}:mode=cline:rate={fps}:colors=0x{color}@0.85{warm},format=rgba[wv{j}]")
             # 'bottom' sits above the bottom titles (now playing), like the page shows it
             y = "H*0.06" if o["pos"].startswith("top") else "(H-h)/2" if o["pos"] == "center" else "H-h-H*0.15"
             graph.append(f"[{last}][wv{j}]overlay=x=(W-w)/2:y={y}:eof_action=pass:"
-                         f"enable='between(t,{a:.3f},{b:.3f})'[w{j}]")
+                         f"enable='between(t,{at:.3f},{at + length:.3f})'[w{j}]")
             last = f"w{j}"
     graph.append(f"[{last}]format=yuv420p,setsar=1[vout]")
 
@@ -447,20 +500,64 @@ def build_export(p: Project, edit: dict, out: Path, tmp: Path) -> tuple[list[str
         venc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", *cap, "-g", str(fps * 2)]
     else:
         venc = ["-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-crf", "22", "-g", str(fps * 10)]
-    cmd = [str(ff.ffmpeg), "-hide_banner", "-loglevel", "error", "-y", "-progress", "pipe:1", "-nostats", *inputs,
-           "-filter_complex", ";".join(graph), "-map", "[vout]", "-map", "[aout]", *venc,
-           "-pix_fmt", "yuv420p", "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
-           "-c:a", "aac", "-b:a", "384k", "-ar", "48000", "-t", f"{total:.3f}", "-movflags", "+faststart", str(out)]
+    picture = ["-pix_fmt", "yuv420p", "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"]
+    head = [str(ff.ffmpeg), "-hide_banner", "-loglevel", "error", "-y", "-progress", "pipe:1", "-nostats", *inputs,
+            "-filter_complex", ";".join(graph), "-map", "[vout]"]
+    if mode == "video":
+        cmd = head + [*venc, *picture, "-t", f"{span:.3f}", "-f", "mpegts", str(out)]
+    else:
+        cmd = head + ["-map", "[aout]", *venc, *picture, "-c:a", "aac", "-b:a", "384k", "-ar", "48000",
+                      "-t", f"{span:.3f}", "-movflags", "+faststart", str(out)]
     return cmd, total, fps
 
 
-def export(p: Project, edit: dict, progress=None) -> Path:
-    out = p.out / f"{p.id}_edit_{edit['res']}.mp4"
-    tmp_out = out.with_name(out.stem + ".part.mp4")
-    tmp = p.work / "export-tmp"
-    shutil.rmtree(tmp, ignore_errors=True)
-    cmd, total, fps = build_export(p, edit, tmp_out, tmp)
-    log(f"Exporting {edit['res']} at {fps} fps, {fmt_ts(total)} long -> {out.name}")
+# ---------------------------------------------------------------- export in parts
+# A long export is made in parts of PART seconds (picture only) plus the whole sound, then joined without
+# re-encoding. Each part is kept in work/export-cache under a fingerprint of exactly what it draws, so
+# Export after Stop carries on where it stopped, and Export after an edit only remakes the parts it changed.
+PART = 300.0
+CACHE_VERSION = "1"
+
+
+def _parts(total: float, fps: int) -> list[tuple[float, float]]:
+    out = []
+    t = 0.0
+    while t < total - 1e-6:
+        out.append((t, min(t + PART, total)))
+        t += PART
+    if len(out) > 1 and out[-1][1] - out[-1][0] < max(1.0, 2.0 / fps):  # no part shorter than a couple of frames
+        last = out.pop()
+        out[-1] = (out[-1][0], last[1])
+    return out
+
+
+def _fingerprint(cmd: list[str], texts: Path, media: str) -> str:
+    """Everything that decides a part's pixels: the FFmpeg command (minus where it writes), the title texts
+    and the size and date of every media file (a new thumbnail keeps its name)."""
+    h = hashlib.sha1(CACHE_VERSION.encode())
+    for arg in cmd[:-1]:
+        h.update(arg.encode("utf-8", "replace") + b"\0")
+    for f in sorted(texts.glob("text*.txt")):
+        h.update(f.read_bytes() + b"\0")
+    h.update(media.encode("utf-8", "replace"))
+    return h.hexdigest()[:20]
+
+
+def _media_sig(p: Project, edit: dict) -> str:
+    sig = []
+    for c in edit["video"] + edit["audio"]:
+        f = resolve(p, c["media"])
+        st = f.stat()
+        sig.append(f"{c['media']}:{st.st_size}:{int(st.st_mtime)}")
+    mix = p.mix().get("tracklist")  # now playing reads the tracklist
+    if mix:
+        sig.append(f"tracklist:{mix.stat().st_size}:{int(mix.stat().st_mtime)}")
+    return "|".join(sorted(sig))
+
+
+def _run(cmd: list[str], length: float, on_frac) -> None:
+    """Run one FFmpeg step; Stop kills it and removes its unfinished file."""
+    target = Path(cmd[-1])
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
                             errors="replace", creationflags=NO_WINDOW)
     assert proc.stdout is not None
@@ -468,16 +565,64 @@ def export(p: Project, edit: dict, progress=None) -> Path:
         if cancelled():
             proc.kill()
             proc.wait()
-            tmp_out.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
             raise Cancelled()
         m = re.match(r"out_time_(?:us|ms)=(\d+)", line.strip())
-        if m and progress:
-            progress(min(1.0, int(m.group(1)) / 1e6 / total))
+        if m and length > 0:
+            on_frac(min(1.0, int(m.group(1)) / 1e6 / length))
     err = proc.stderr.read() if proc.stderr else ""
     if proc.wait() != 0:
-        tmp_out.unlink(missing_ok=True)
+        target.unlink(missing_ok=True)
         raise PlaylistKitError("FFmpeg could not export the video:\n" + "\n".join(err.strip().splitlines()[-12:]))
+
+
+def export(p: Project, edit: dict, progress=None) -> Path:
+    out = p.out / f"{p.id}_edit_{edit['res']}.mp4"
+    total, fps = duration(edit), export_fps(p, edit)
+    cache, tmp = p.work / "export-cache", p.work / "export-tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
+    cache.mkdir(parents=True, exist_ok=True)
+    for left in cache.glob("*.part*"):  # what a stopped or crashed export left half-written
+        left.unlink(missing_ok=True)
+    media = _media_sig(p, edit)
+    steps = []  # (file, cmd, seconds of timeline)
+    for k, (a, b) in enumerate(_parts(total, fps)):
+        cmd, _, _ = build_export(p, edit, cache / "x.ts", tmp / f"part{k}", a, b, mode="video")
+        f = cache / f"v{edit['res']}-{_fingerprint(cmd, tmp / f'part{k}', media)}.ts"
+        steps.append((f, cmd, b - a))
+    cmd, _, _ = build_export(p, edit, cache / "x.m4a", tmp / "audio", mode="audio")
+    sound = cache / f"a-{_fingerprint(cmd, tmp / 'audio', media)}.m4a"
+    steps.append((sound, cmd, total * 0.05))  # the sound is quick next to the picture
+    grand = sum(s for _, _, s in steps)
+    done = sum(s for f, _, s in steps if f.is_file())
+    kept = sum(1 for f, _, _ in steps[:-1] if f.is_file())
+    log(f"Exporting {edit['res']} at {fps} fps, {fmt_ts(total)} long -> {out.name}"
+        + (f"  ({kept} of {len(steps) - 1} parts already made, carrying on)" if kept else ""))
+    if progress:
+        progress(done / grand)
+    for f, cmd, secs in steps:
+        if f.is_file():
+            continue
+        part = f.with_name(f.stem + ".part" + f.suffix)
+        cmd[-1] = str(part)
+        _run(cmd, secs if f != sound else total, lambda x, d=done, s=secs: progress and progress((d + x * s) / grand))
+        part.replace(f)
+        done += secs
+    # join the parts and the sound without re-encoding
+    tmp.mkdir(parents=True, exist_ok=True)
+    listing = tmp / "parts.txt"
+    listing.write_text("".join(f"file '{str(f).replace(chr(39), chr(39) + chr(92) + chr(39) + chr(39))}'\n"
+                               for f, _, _ in steps[:-1]), encoding="utf-8")
+    tmp_out = out.with_name(out.stem + ".part.mp4")
+    ff = find_ffmpeg()
+    _run([str(ff.ffmpeg), "-hide_banner", "-loglevel", "error", "-y", "-progress", "pipe:1", "-nostats",
+          "-f", "concat", "-safe", "0", "-i", str(listing), "-i", str(sound), "-map", "0:v", "-map", "1:a",
+          "-c", "copy", "-t", f"{total:.3f}", "-movflags", "+faststart", str(tmp_out)], total, lambda x: None)
     tmp_out.replace(out)
+    keep = {f for f, _, _ in steps}
+    for f in cache.iterdir():  # keep only this export's parts: an edit after this reuses them
+        if f not in keep:
+            f.unlink(missing_ok=True)
     shutil.rmtree(tmp, ignore_errors=True)
     log(f"Video ready: {out}  ({out.stat().st_size / 1e6:.0f} MB)")
     return out

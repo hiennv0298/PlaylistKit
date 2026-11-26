@@ -3,6 +3,12 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.9
+
+- **Export carries on after Stop.** The video editor now makes a long video in 5-minute parts and keeps each finished part. Export after **Stop** starts where it stopped instead of from the beginning.
+- **Export after a small edit only remakes what changed.** Each part is kept under a fingerprint of exactly what it shows. Moving a title at 30:00 remakes only the part around 30:00; the other parts and the sound are reused.
+- The parts are joined without re-encoding, so the finished video is the same as before. They are kept in the playlist's `work` folder until the next export, and only for the last export.
+
 ## 0.2.8
 
 - **Fixed: other apps were grouped under PlaylistKit's taskbar button** (CommentKit, ClipKit, anything else running on 127.0.0.1).
