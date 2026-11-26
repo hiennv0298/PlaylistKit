@@ -3,6 +3,11 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.4
+
+- **Fixed: Update now did not install the new version.** The installer started while PlaylistKit was still running and could not close it, because PlaylistKit has no window of its own. A silent update then gave up and you stayed on the old version. The installer now waits for PlaylistKit to quit, closes it if it does not, and installs. Updating from 0.2.2 or 0.2.3 works with this release.
+- **Fixed: Close this window** did nothing after you had opened a playlist. The window can now close itself. If Windows still refuses, it tells you to use the X or Alt+F4.
+
 ## 0.2.3
 
 - **Fixed: Remix stopped with "Demucs that bai"** (`--clip-mode: invalid choice: 'none'`). The AI runtime installs Demucs 4.0.1, whose command line has no `none` option. The engine now starts Demucs so that it accepts it. Stems are still saved without clipping, so they add up exactly to the original song.

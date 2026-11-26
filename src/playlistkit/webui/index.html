@@ -308,7 +308,7 @@
 <div class="modal" id="gone" hidden>
   <div class="card" style="text-align:center"><img src="/icon-192.png" alt="" width="64" height="64" onerror="this.remove()">
     <h2 id="goneTitle" style="margin-top:12px"></h2><p class="muted" id="goneText"></p>
-    <div class="row" style="justify-content:center;margin-top:14px"><button class="btn primary" onclick="window.close()">Close this window</button></div></div>
+    <div class="row" style="justify-content:center;margin-top:14px"><button class="btn primary" onclick="closeWindow()">Close this window</button></div></div>
 </div>
 
 <div class="modal" id="notes" hidden onclick="if(event.target===this)closeNotes()">
@@ -365,7 +365,7 @@ function renderGenrePick() {
 }
 function pickGenre(id) { NEW_GENRE = id; renderGenrePick(); }
 async function goHome() {
-  P = null; location.hash = ''; $('home').hidden = false; $('proj').hidden = true;
+  P = null; setRoute(''); $('home').hidden = false; $('proj').hidden = true;
   const list = await api('/api/projects');
   $('projects').innerHTML = list.length ? list.map(p => `<div class="card pcard" onclick="openProject('${p.id}')">
       <div class="row"><span class="em">${p.emoji}</span><div style="flex:1;min-width:0"><b class="ell" style="display:block">${esc(p.name)}</b>
@@ -395,7 +395,7 @@ function quickVideo() { return startJob('/api/video', {image: QUICK.image, audio
 // ---------------------------------------------------------------- project
 async function openProject(id) {
   P = await api('/api/project?id=' + encodeURIComponent(id));
-  location.hash = id; $('home').hidden = true; $('proj').hidden = false;
+  setRoute(id); $('home').hidden = true; $('proj').hidden = false;
   $('pEmoji').textContent = P.emoji; $('pName').value = P.name; $('pGenre').value = P.genre;
   $('pInfo').textContent = `${P.songs} songs · ${P.songs_dir}`;
   $('pRisk').textContent = P.risk_text;
@@ -542,6 +542,12 @@ function busyWhile(...names) {
   }
 }
 let pollTimer = null, FAILS = 0, GONE = false, UPDATING = false;
+// Replace (not push) the #route: a window with one history entry may close itself (Close this window).
+function setRoute(id) { history.replaceState(null, '', id ? '#' + id : location.pathname + location.search); }
+function closeWindow() {
+  window.close();
+  setTimeout(() => { $('goneText').textContent = 'This window could not close itself. Close it with the X in the corner or Alt+F4.'; }, 400);
+}
 function showGone() {
   if (GONE) return; GONE = true; clearTimeout(pollTimer);
   $('goneTitle').textContent = UPDATING ? 'Installing the update…' : 'PlaylistKit is not running';
@@ -615,7 +621,7 @@ async function waitForNewVersion(from, since = Date.now()) {
   } catch (e) { /* not up yet */ }
   if (Date.now() - since > 5 * 60 * 1000) {
     $('goneTitle').textContent = 'The update did not reopen PlaylistKit';
-    $('goneText').textContent = 'Close this window and open PlaylistKit from the Start menu or desktop.';
+    $('goneText').textContent = 'Close this window, open PlaylistKit from the Start menu or desktop and press Update now again.';
     return;
   }
   setTimeout(() => waitForNewVersion(from, since), 1500);

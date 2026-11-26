@@ -154,8 +154,9 @@ def _expected_hash(sums_url: str, name: str) -> str:
     raise PlaylistKitError(f"SHA256SUMS.txt has no entry for {name}.")
 
 
-def download_and_install(on_launched) -> None:
-    """Download the new installer, verify it, start it silently, then call on_launched()."""
+def download_and_install(on_launched, before_launch=lambda: None) -> None:
+    """Download the new installer, verify it, call before_launch(), start it silently, then call on_launched().
+    The installer may force close this process at once, so anything to save goes in before_launch."""
     state = _load()
     st = status()
     if not st["can_install"]:
@@ -189,6 +190,7 @@ def download_and_install(on_launched) -> None:
             raise PlaylistKitError("The downloaded installer does not match its published SHA-256 fingerprint, "
                                "so it was deleted. Try again later or download it from the Releases page.")
         tmp.replace(dest)
+        before_launch()
         flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         subprocess.Popen([str(dest), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS",
                           "/RELAUNCH=1"], creationflags=flags, close_fds=True)

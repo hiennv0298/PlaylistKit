@@ -855,19 +855,23 @@ RELAUNCH_FILE = "relaunch.json"
 
 
 def _install_update() -> None:
-    def quit_soon() -> None:
+    def remember_port() -> None:
         # The new version starts on this same port, so the open window reloads into it
-        # instead of a second window opening next to a dead one.
+        # instead of a second window opening next to a dead one. Written before the installer
+        # starts: it may force close this process right away.
         if SERVER:
             try:
                 write_json(app_home() / RELAUNCH_FILE, {"port": SERVER.server_address[1], "at": time.time(),
                                                         "from": __version__})
             except OSError:
                 pass
-            threading.Timer(2.5, SERVER.shutdown).start()
+
+    def quit_soon() -> None:
+        if SERVER:
+            threading.Timer(1.0, SERVER.shutdown).start()  # lets the page read "restarting" first
 
     try:
-        updates.download_and_install(quit_soon)
+        updates.download_and_install(quit_soon, remember_port)
     except PlaylistKitError:
         pass  # the error is in updates.PROGRESS for the page to show
 
