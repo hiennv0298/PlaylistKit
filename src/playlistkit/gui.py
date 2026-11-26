@@ -306,6 +306,14 @@ def job_video(pid: str, image: str, audio: str, resolutions: list[str], out_dir:
     return {"videos": made}
 
 
+def job_export(pid: str, edit: dict) -> dict:
+    from playlistkit import editor
+
+    p = get_project(pid)
+    out = editor.export(p, edit, progress=lambda f: STATE.set(f, f"Exporting {edit['res']}  {int(f * 100)}%"))
+    return {"videos": [str(out)]}
+
+
 def job_cut(pid: str, text: str) -> dict:
     from playlistkit import cut, meta
 
@@ -405,6 +413,12 @@ def pick(kind: str, initial: str = "") -> str:
             elif kind == "audio":
                 path = filedialog.askopenfilename(parent=tkroot, title="Choose the audio",
                                                   filetypes=[("Audio", "*.wav *.mp3 *.m4a *.flac *.aac *.ogg")])
+            elif kind == "media":
+                paths = filedialog.askopenfilenames(
+                    parent=tkroot, title="Add media to this playlist",
+                    filetypes=[("Media", "*.jpg *.jpeg *.png *.webp *.bmp *.wav *.mp3 *.m4a *.flac *.aac *.ogg "
+                                         "*.mp4 *.mov *.mkv *.webm"), ("All files", "*.*")])
+                return "\n".join(str(Path(x)) for x in paths)
             else:
                 path = filedialog.askopenfilename(parent=tkroot, title="Choose a file")
         finally:
@@ -504,6 +518,30 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             if path in ("/icon-32.png", "/icon-192.png", "/icon-512.png", "/favicon.ico"):
                 return self._serve_file(WEBUI / ("playlistkit.ico" if path == "/favicon.ico" else path[1:]))
+            if path == "/editor.js":
+                return self._send(200, (WEBUI / "editor.js").read_bytes(), "text/javascript; charset=utf-8")
+            if path == "/api/edit":
+                from playlistkit import editor
+
+                p = get_project(query.get("id", [""])[0])
+                e = editor.load_edit(p)
+                return self._json({"edit": e, "media": editor.list_media(p),
+                                   "titles": [[a, b, n] for a, b, n in editor.song_titles(p, e)],
+                                   "mix": [f"out/{f.name}" for k, f in p.mix().items() if k in ("wav", "mp3")]})
+            if path == "/api/media":
+                from playlistkit import editor
+
+                return self._json(editor.list_media(get_project(query.get("id", [""])[0])))
+            if path == "/api/media/peaks":
+                from playlistkit import editor
+
+                p = get_project(query.get("id", [""])[0])
+                return self._json(editor.peaks(p, query.get("ref", [""])[0]))
+            if path == "/api/media/vthumb":
+                from playlistkit import editor
+
+                p = get_project(query.get("id", [""])[0])
+                return self._serve_file(editor.video_thumb(p, query.get("ref", [""])[0]))
             if path == "/__demo.js" and _demo_script():
                 return self._send(200, _demo_script().encode("utf-8"), "text/javascript; charset=utf-8")
             if path == "/api/ping":
@@ -533,7 +571,8 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/files/"):  # /files/<pid>/<area>/<name>  area: song | out | thumb
                 _, _, pid, area, name = path.split("/", 4)
                 p = get_project(pid)
-                base = {"song": p.songs, "out": p.out, "thumb": p.dir}.get(area)
+                base = {"song": p.songs, "out": p.out, "thumb": p.dir, "media": p.dir / "media",
+                        "frame": p.work}.get(area)
                 if base is None:
                     return self._send(404, b"Not found", "text/plain")
                 target = (base / name).resolve()
@@ -556,8 +595,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if not self._host_ok():
             return self._send(403, b"Forbidden", "text/plain")
-        path = urlparse(self.path).path
+        url = urlparse(self.path)
+        path = url.path
         length = int(self.headers.get("Content-Length") or 0)
+        if path == "/api/media/upload":  # a file dragged in from Explorer: stream it to disk
+            return self._upload(parse_qs(url.query), length)
         raw = self.rfile.read(length) if length else b""
         if path == "/api/bye":
             STATE.bye_at = time.monotonic()
@@ -573,6 +615,33 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(exc)}, 400)
         except Exception:  # noqa: BLE001
             self._json({"error": traceback.format_exc()}, 500)
+
+    def _upload(self, query: dict, length: int) -> None:
+        from playlistkit import editor
+
+        if self.headers.get("X-PlaylistKit") != "1":
+            return self._send(403, b"Forbidden", "text/plain")
+        try:
+            p = get_project(query.get("id", [""])[0])
+            target = editor.unique_media_path(p, unquote(query.get("name", ["file"])[0]))
+            tmp = target.with_name(target.name + ".part")
+            left = length
+            with open(tmp, "wb") as f:
+                while left > 0:
+                    chunk = self.rfile.read(min(1 << 20, left))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    left -= len(chunk)
+            if left:
+                tmp.unlink(missing_ok=True)
+                raise PlaylistKitError("The upload was interrupted.")
+            tmp.replace(target)
+            self._json({"ref": f"media/{target.name}"})
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
+        except (PlaylistKitError, ValueError, KeyError) as exc:
+            self._json({"error": str(exc)}, 400)
 
     def _post(self, path: str, body: dict) -> dict:
         pid = str(body.get("id") or "")
@@ -715,6 +784,44 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 target = root()
             reveal(target)
+            return {"ok": True}
+        if path == "/api/edit/save":
+            from playlistkit import editor
+
+            return {"edit": editor.save_edit(get_project(pid), body.get("edit") or {})}
+        if path == "/api/edit/reset":
+            from playlistkit import editor
+
+            p = get_project(pid)
+            p.file("edit.json").unlink(missing_ok=True)
+            return {"edit": editor.load_edit(p)}
+        if path == "/api/edit/frame":
+            from playlistkit import editor
+
+            p = get_project(pid)
+            editor.preview_frame(p, editor.clean_edit(p, body.get("edit") or {}), float(body.get("at") or 0))
+            return {"url": f"/files/{p.id}/frame/frame-preview.png?t={time.time():.0f}"}
+        if path == "/api/edit/export":
+            from playlistkit import editor
+
+            p = get_project(pid)
+            e = editor.save_edit(p, body.get("edit") or {})
+            start_job("video", "Exporting the video", pid, job_export, pid, e)
+            return {"ok": True}
+        if path == "/api/media/import":
+            from playlistkit import editor
+
+            p = get_project(pid)
+            picked = [x for x in pick("media").split("\n") if x]
+            return {"refs": [editor.import_file(p, Path(x)) for x in picked]}
+        if path == "/api/media/delete":
+            from playlistkit import editor
+
+            p = get_project(pid)
+            ref = str(body.get("ref") or "")
+            if not ref.startswith("media/"):
+                raise PlaylistKitError("Only files you added yourself can be removed here.")
+            recycle(editor.resolve(p, ref))
             return {"ok": True}
         if path == "/api/link":
             url = str(body.get("url") or "")

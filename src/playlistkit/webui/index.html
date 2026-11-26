@@ -166,6 +166,7 @@
       <select class="input" id="pGenre" onchange="updateProject({genre:this.value})"></select>
       <span class="muted small" id="pInfo"></span>
       <div class="spacer"></div>
+      <button class="btn small primary" onclick="openEditor()">🎬 Video editor</button>
       <button class="btn small" onclick="api('/api/open',{id:P.id})">Open folder</button>
       <button class="btn small danger" onclick="deleteProject()">Delete</button>
     </div>
@@ -247,6 +248,8 @@
           <div class="row" style="margin-top:12px" id="vRes"></div>
           <div class="row" style="margin-top:12px"><button class="btn primary big" onclick="makeVideo()">Make MP4</button></div>
           <p class="faint small">Still image + the mix, 2 fps H.264 + AAC 384k, made for YouTube. Non-16:9 images sit on a blurred copy of themselves.</p>
+          <div class="note small" style="margin-top:10px">Want titles, a sound wave, a progress bar, several pictures or your own clips?
+            <button class="btn small primary" onclick="openEditor()">Open the video editor</button></div>
           <h3 style="margin-top:16px">Files</h3>
           <div id="outFiles" class="small"></div>
         </div>
@@ -489,6 +492,7 @@ async function poll(now) {
     }
     if (LAST_PHASE === 'busy' && !s.busy) {  // a job just ended
       if (s.phase === 'done') { if (P) refresh(); else goHome(); if (s.label === 'Installing the AI runtime') openSettings(); }
+      if (window.edOnJobDone) edOnJobDone();
       else if (P) refresh();
     }
     LAST_PHASE = s.busy ? 'busy' : s.phase;
@@ -547,5 +551,6 @@ async function installUpdate() {
 window.addEventListener('pagehide', () => navigator.sendBeacon('/api/bye', '{}'));
 init();
 </script>
+<script src="/editor.js"></script>
 </body>
 </html>

@@ -12,6 +12,8 @@ Everything runs on your computer. No account, no API key (Jamendo needs a free c
 | :---: | :---: | :---: |
 | ![Home screen with 42 genres](docs/screenshot-home.png) | ![Songs found, with their rights](docs/screenshot-songs.png) | ![YouTube text and the video](docs/screenshot-yt.png) |
 
+![The video editor: media library, preview with now playing and a sound wave, timeline with three tracks](docs/screenshot-editor.png)
+
 ## What it does
 
 | Step | |
@@ -21,6 +23,7 @@ Everything runs on your computer. No account, no API key (Jamendo needs a free c
 | **2 · Remix** | The remix engine separates each song into stems with Demucs, orders the songs by tempo and key, beat-matches them and blends them with stem transitions (vocals out first, bass swap, drums last), applies the genre's style and masters to −14 LUFS. Output: 48 kHz WAV, MP3 320k and a tracklist with timestamps. |
 | **3 · YouTube** | Title like `chuyện mưa và những câu xin chào 🌧️ \| 1 giờ 44 phút`, a description with the tracklist, credits for Creative Commons songs, 3 hashtags, and up to 500 characters of tags. Copy each with one click; edit song names in the tracklist. |
 | **Video** | Choose a thumbnail and make the MP4: still image, 2 fps H.264 + AAC 384 kHz, so a 1h40 playlist encodes in a couple of minutes. Images that aren't 16:9 sit on a blurred copy of themselves. **Quick video** on the home screen does the same for any image + WAV/MP3. |
+| **🎬 Video editor** | A small Clipchamp-style editor: the playlist's media on the left (drag in more files from Explorer), a preview with sound, and a timeline with video/images, text & effects and audio tracks. Drag clips, trim, split, undo. Add titles, **Now playing** (song names from the tracklist), a **sound wave** and a **progress bar**, then export 480p/720p/1080p. **Check frame** shows exactly what the export will look like. |
 | **4 · Content ID** | Paste the claim times from YouTube Studio (`47:48 — 51:52` …). PlaylistKit shows which songs they hit and the new length, then cuts them out with 3 s crossfades, re-limits the audio, and updates the tracklist, description and backlog. |
 
 ### Genres
@@ -74,7 +77,9 @@ playlistkit cut indie-3 "47:48-51:52" "1:06:09-1:09:29" --dry-run
     project.json  candidates.json  downloads.json  screen.json  thumb.jpg
     songs\                    the downloaded songs (or your own folder)
     work\                     engine caches (decoded audio, stems): safe to delete
-    out\  indie-1_indie.wav/.mp3  tracklist_indie.txt  youtube_meta.txt  indie-1_720p.mp4
+    media\                    files you imported or dragged into the editor
+    edit.json                 the editor's timeline
+    out\  indie-1_indie.wav/.mp3  tracklist_indie.txt  youtube_meta.txt  indie-1_720p.mp4  indie-1_edit_720p.mp4
 ```
 
 ## Development
@@ -111,7 +116,9 @@ src/playlistkit/
   runtime.py     installs the AI runtime (uv + PyTorch + Demucs) and runs the engine
   engine/        remix_engine.py: Demucs stems, beat-matching, transitions, styles, mastering
   meta.py        tracklist clean-up, title, description, tags
-  video.py       still image + audio -> MP4
+  video.py       still image + audio -> MP4 (Quick video)
+  editor.py      the video editor: media library, edit.json, waveform peaks, FFmpeg export
+  webui/editor.js  the editor's page: media panel, preview, timeline
   cut.py         Content ID cuts
   updates.py     GitHub Releases check, verified one-click install
 ```

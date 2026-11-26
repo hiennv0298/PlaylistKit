@@ -3,6 +3,17 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.0
+
+- **Video editor** (🎬 Video editor on a playlist): a media library, a preview and a timeline, like a small Clipchamp.
+  - **Media:** the playlist's mixes, thumbnail and videos are already there. Add more with **Import** or by dragging files from Explorer into the window.
+  - **Timeline** with three tracks (video & images, text & effects, audio): drag media onto a track, move clips, drag their edges to trim, **Split** (S), **Delete**, **Undo/Redo** (Ctrl+Z / Ctrl+Y), zoom. Audio clips show their waveform.
+  - **Text & effects:** your own titles, **Now playing** (the current song's name, taken from the tracklist), a **sound wave** and a **progress bar**. Position, size, colour and a dark box are adjustable.
+  - **Pictures:** fit on a blurred copy, fill or fit with black bars, optional slow zoom. **Audio:** volume, fade in and out.
+  - **Preview** plays the timeline with sound; **Check frame** shows exactly what the exported video looks like at the playhead.
+  - **Export** 480p, 720p or 1080p MP4 for YouTube (NVIDIA GPU encoding when available). Still pictures export at 2 fps (fast); a sound wave uses 15 fps, video clips and slow zoom 25 fps.
+- The edit is saved by itself in the playlist folder (`edit.json`).
+
 ## 0.1.3
 
 - **Own taskbar button.** PlaylistKit's window is no longer grouped with ClipKit or other Edge app windows; it gets its own taskbar button and icon, and *Pin to taskbar* pins PlaylistKit itself.
