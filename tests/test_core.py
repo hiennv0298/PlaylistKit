@@ -30,6 +30,39 @@ def test_backlog_blocks_used_and_claimed(tmp_path):
     assert bl2.check("New Artist", "New Song") == ""
 
 
+def test_backlog_warns_instead_of_hiding(tmp_path):
+    bl = Backlog(tmp_path / "b.tsv")
+    bl.ban_artist("Vũ.")
+    bl.mark("lofi-1", "Lamp", "Hatachi No Koi", "claimed", "Content ID: cannot be monetized")
+    bl.mark("lofi-1", "Thỏ", "Em đi đâu", "used")
+    bl.mark("lofi-1", "Ai Đó", "Bài dở", "bad-quality")
+    assert bl.review("Vũ.", "Lạ Lùng")[0] == "banned artist"
+    assert bl.review("Someone", "Bài dở")[0].startswith("removed before")
+    skip, warn, hold = bl.review("Lamp", "Hatachi No Koi (Official Audio)")
+    assert not skip and hold and "cannot be monetized" in warn and "lofi-1" in warn
+    skip, warn, hold = bl.review("Lamp", "Another Song")  # the artist was claimed
+    assert not skip and hold and "claimed" in warn
+    assert bl.review("Someone", "Em đi đâu") == ("", "already used in lofi-1", False)
+    assert bl.review("Thỏ", "Bài mới") == ("", "artist used before", False)
+    assert bl.review("Thỏ", "Bài mới", allow_used_artists=True) == ("", "", False)
+    assert bl.claimed_titles() == {"hatachi no koi": "lofi-1"}
+
+
+def test_pick_warns_and_never_ticks_claimed_songs(tmp_path):
+    bl = Backlog(tmp_path / "b.tsv")
+    bl.mark("lofi-1", "Lamp", "Hatachi No Koi", "claimed")
+    bl.mark("lofi-1", "Thỏ", "Em đi đâu", "used")
+    c = [Candidate("jamendo", "1", "u", "Lamp", "Hatachi No Koi", 200, 9999, license="cc-by", safety="cc"),
+         Candidate("jamendo", "2", "u", "Thỏ", "Em đi đâu", 200, 9999, license="cc-by", safety="cc"),
+         Candidate("jamendo", "3", "u", "New", "Fresh", 200, 10, license="cc-by", safety="cc")]
+    out = {x.sid: x for x in pick(c, genres.GENRES["chill"], 5, bl, [])}
+    assert not out["1"].skip and out["1"].hold and not out["1"].selected  # shown, warned, not ticked
+    assert not out["2"].skip and out["2"].warn and out["2"].selected     # used before: a warning only
+    assert out["3"].selected and not out["3"].warn
+    money = {x.sid: x for x in pick(c, genres.GENRES["chill"], 5, bl, [], money_only=True)}
+    assert money["1"].skip == "claimed by Content ID before"
+
+
 def test_pick_one_per_artist_and_filters(tmp_path):
     bl = Backlog(tmp_path / "b.tsv")
     g = genres.get("indie")

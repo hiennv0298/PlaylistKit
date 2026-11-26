@@ -114,6 +114,57 @@ class Backlog:
             return "artist already used"
         return ""
 
+    def _row_for(self, title: str, statuses: set[str]) -> Row | None:
+        t = key(title)
+        if not t:
+            return None
+        for r in self.rows:
+            if r.status in statuses and r.title not in ("", "*"):
+                k = key(r.title)
+                if k == t or (len(k) > 6 and (k in t or t in k)):
+                    return r
+        return None
+
+    def review(self, artist: str, title: str, allow_used_artists: bool = False,
+               banned: set[str] | None = None) -> tuple[str, str, bool]:
+        """(skip, warning, hold) for a found song. Only a banned artist and songs you removed as not fitting or
+        bad quality are skipped. Everything else the backlog knows is shown with a warning: a song or artist
+        claimed by Content ID (hold: not ticked for you, it cannot be monetized), and songs or artists used before."""
+        who = key(artist)
+        banned = self.banned_artists() if banned is None else banned
+        for b in banned:  # artist names only: "Vũ" must not block a title like "Vũ trụ"
+            if b and (b in who.split() if " " not in b else f" {b} " in f" {who} "):
+                return "banned artist", "", False
+        removed = self._row_for(title, {"not-fit", "bad-quality"})
+        if removed:
+            return f"removed before ({removed.status}, {removed.playlist})", "", False
+        claimed = self._row_for(title, {"claimed"})
+        if claimed:
+            return "", f"Content ID claimed it in {claimed.playlist}: cannot be monetized", True
+        t = key(title)
+
+        def artist_in(names: set[str]) -> bool:
+            return any(a == who or (len(a) > 3 and f" {a} " in f" {who} ") or (len(a) > 5 and f" {a} " in f" {t} ")
+                       for a in names)
+        claimed_artists = {k for r in self.rows if r.status == "claimed" and r.artist != "*"
+                           for k in self._artist_keys(r.artist)}
+        if artist_in(claimed_artists):
+            return "", "this artist was claimed by Content ID before: likely to be claimed again", True
+        used = self._row_for(title, {"used", "downloaded", "duplicate"})
+        if used:
+            return "", f"already used in {used.playlist}", False
+        if not allow_used_artists and artist_in(self.used_artists()):
+            return "", "artist used before", False
+        return "", "", False
+
+    @staticmethod
+    def _artist_keys(artist: str) -> set[str]:
+        return {k for part in re.split(r",|&| x | ft\.? | feat\.? |\(|\+", artist) if len(k := key(part)) > 1}
+
+    def claimed_titles(self) -> dict[str, str]:
+        """key(title) -> playlist, for songs Content ID claimed."""
+        return {key(r.title): r.playlist for r in self.rows if r.status == "claimed" and r.title not in ("", "*")}
+
     def find(self, playlist: str, artist: str, title: str) -> Row | None:
         ka, kt = key(artist), key(title)
         for r in self.rows:

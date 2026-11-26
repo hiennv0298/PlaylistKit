@@ -523,7 +523,7 @@ function renderCands() {
     <td><span class="badge ${cls}" title="${esc((x.flags || []).join(', ') + ' ' + (x.license || ''))}">${label}</span>
       ${x.lic && x.source !== 'local' ? `<span class="badge ${x.money ? 'ok' : 'warn'}" title="${x.money ? 'This licence allows a monetized remix' : 'This licence does not allow a monetized remix'}">${esc(x.lic)}${x.money ? ' · $ ok' : ''}</span>` : ''}</td>
     <td>${fmt(x.duration)}</td><td>${num(x.plays)}</td>
-    <td class="small faint">${esc(x.skip)} ${x.url && x.url.startsWith('http') ? `<a href="#" onclick="api('/api/link',{url:'${esc(x.url)}'});return false">open</a>` : ''}</td></tr>`; }).join('');
+    <td class="small faint">${esc(x.skip)}${x.warn ? `<div class="flag ${x.hold ? 'bad' : 'warn'}">⚠ ${esc(x.warn)}</div>` : ''} ${x.url && x.url.startsWith('http') ? `<a href="#" onclick="api('/api/link',{url:'${esc(x.url)}'});return false">open</a>` : ''}</td></tr>`; }).join('');
 }
 async function saveSel() { const sel = [...document.querySelectorAll('.cand:checked')].map(x => x.value);
   await api('/api/candidates', {id: P.id, selected: sel}); P.candidates.forEach(c => c.selected = sel.includes(c.source + ':' + c.sid));
@@ -538,7 +538,7 @@ function renderSongs() {
   $('songRows').innerHTML = s.map(x => { const worst = (x.flags || []).some(f => f.level === 'bad') ? 'bad' : (x.flags || []).length ? 'warn' : '';
     return `<tr><td class="ell"><a href="#" onclick="playSong('${encodeURIComponent(x.file)}');return false" title="Play">▶</a> ${esc(x.file)}</td>
     <td>${x.duration ? fmt(x.duration) : ''}</td><td>${x.sub_db != null ? x.sub_db + ' dB' : ''}</td>
-    <td>${x.checked ? (x.flags.length ? x.flags.map(f => `<div class="flag ${f.level}">${esc(f.text)}</div>`).join('') : '<span class="flag" style="color:var(--ok)">ok</span>') : '<span class="faint">not checked</span>'}</td>
+    <td>${x.flags.length ? x.flags.map(f => `<div class="flag ${f.level}">${esc(f.text)}</div>`).join('') : x.checked ? '<span class="flag" style="color:var(--ok)">ok</span>' : '<span class="faint">not checked</span>'}</td>
     <td><select class="input sm" onchange="removeSong('${encodeURIComponent(x.file)}', this)"><option value="">Remove…</option><option value="not-fit">doesn't fit</option>
       <option value="bad-quality">bad quality</option><option value="duplicate">duplicate</option><option value="banned">ban this artist</option></select></td></tr>`; }).join('');
 }

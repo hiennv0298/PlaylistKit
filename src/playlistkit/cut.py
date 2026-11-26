@@ -172,7 +172,8 @@ def apply_cut(project: Project, plan: Plan, backlog: Backlog, style: str | None 
         name = plan.tracks[i][1]
         f = _match_file(project, name)
         info = song_info(project, f) if f else {"artist": name.split(" - ")[0], "title": name.split(" - ", 1)[-1]}
-        backlog.mark(project.id, info["artist"] or "?", info["title"], "claimed", "Content ID")
+        # searches then warn about it (and its artist) and never tick it: it cannot be monetized
+        backlog.mark(project.id, info["artist"] or "?", info["title"], "claimed", "Content ID: cannot be monetized")
         if f:
             for tid, v in list(an.items()):
                 if Path(str(v.get("src", ""))).name == f.name:

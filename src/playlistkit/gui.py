@@ -396,14 +396,22 @@ def project_detail(pid: str) -> dict:
     from playlistkit.download import song_info
     from playlistkit.sources import song_rights
 
+    from playlistkit.backlog import key as bl_key
+
     p = get_project(pid)
     screen = read_json(p.file("screen.json"), {})
+    claimed = backlog().claimed_titles()
     songs = []
     for f in p.song_files():
         info = song_info(p, f)
         sc = screen.get(f.name, {})
-        songs.append({"file": f.name, **info, **song_rights(info), "duration": sc.get("duration", 0), "sub_db": sc.get("sub_db"),
-                      "cutoff_khz": sc.get("cutoff_khz"), "flags": sc.get("flags", []),
+        rights, flags = song_rights(info), list(sc.get("flags", []))
+        where = claimed.get(bl_key(info.get("title") or "")) if info.get("title") else None
+        if where:  # cut for Content ID in some playlist: it cannot earn money here either
+            rights = {"lic": "claimed by Content ID", "money": False}
+            flags.insert(0, {"level": "bad", "text": f"Content ID claimed it in {where}: cannot be monetized"})
+        songs.append({"file": f.name, **info, **rights, "duration": sc.get("duration", 0), "sub_db": sc.get("sub_db"),
+                      "cutoff_khz": sc.get("cutoff_khz"), "flags": flags,
                       "checked": f.name in screen})
     meta_path = p.out / "youtube_meta.txt"
     mix = p.mix()

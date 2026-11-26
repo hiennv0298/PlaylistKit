@@ -3,6 +3,14 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.12
+
+- **Songs claimed by Content ID are marked as not monetizable.** Cutting claims on the Content ID tab saves them in the backlog as "Content ID: cannot be monetized".
+  - Searches then show the song, and other songs by the same artist, with a red warning. They are never ticked for you.
+  - **Only music I can monetize** leaves them out.
+  - In a playlist's song list, a song claimed in any playlist shows "Content ID claimed it in …: cannot be monetized" and counts as not monetizable.
+- **Songs and artists used before are a warning now, not hidden.** A song already used in another playlist, or an artist used before, shows in the search with "already used in …" or "artist used before". New songs are still ticked first, and these only fill the playlist when there are not enough new ones. Banned artists, and songs you removed as not fitting or bad quality, are still left out.
+
 ## 0.2.11
 
 - **Fixed: the bar at the bottom stayed at "100%" with a Stop button after a job had finished.** This happened when the bar had been closed with ✕ before, or when the job was started from another window. A running job is now always shown and ends with "Done.".

@@ -115,6 +115,8 @@ class Candidate:
     score: float = 0.0
     lic: str = ""            # the licence as people read it: "CC BY 4.0"
     money: bool = False      # the licence allows a monetized remix (see licence())
+    warn: str = ""           # what the backlog knows: used before, claimed by Content ID... (still allowed)
+    hold: bool = False       # allowed but not ticked for you (claimed by Content ID before)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -534,13 +536,15 @@ def pick(cands: list[Candidate], genre: Genre, want: int, backlog: Backlog, bann
             c.skip = "not a single song"
         elif soft and c.source != "local" and SOFT_JUNK.search(text):
             c.skip = f"not {genre.name}"
-        else:
-            c.skip = backlog.check(c.artist, c.title, allow_used_artists, banned_set)
+        else:  # the backlog warns about songs and artists used or claimed before; only removed songs are skipped
+            c.skip, c.warn, c.hold = backlog.review(c.artist, c.title, allow_used_artists, banned_set)
         if not c.skip and c.safety == "distributed" and not allow_distributed and genre.risk != "high":
             c.skip = "distributed release (Content ID likely)"
         if not c.skip and money_only:
-            c.skip = money_skip(c)
+            c.skip = money_skip(c) or ("claimed by Content ID before" if c.hold else "")
         c.score = SAFETY_SCORE.get(c.safety, 1.0) + min(math.log10(c.plays + 10), 6.0) / 2
+        if c.warn:  # new songs come first; a song with a warning fills the playlist only when needed
+            c.score -= 4.0 if c.hold else 1.5
         prev = best_by_title.get(t)
         if not c.skip and prev and not prev.skip:
             if c.score > prev.score:
@@ -566,13 +570,13 @@ def pick(cands: list[Candidate], genre: Genre, want: int, backlog: Backlog, bann
     n = 0
     for q in by_source.values():
         for c in q[: round(want * len(q) / total) if total else 0]:
-            if n < want:
+            if n < want and not c.hold:
                 c.selected = True
                 n += 1
     for c in ok:
         if n >= want:
             break
-        if not c.skip and not c.selected:
+        if not c.skip and not c.selected and not c.hold:  # claimed songs are never ticked for you
             c.selected = True
             n += 1
     unique_cands, uids = [], set()
