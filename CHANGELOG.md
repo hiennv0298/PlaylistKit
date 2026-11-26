@@ -3,6 +3,11 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.3
+
+- **Fixed: Remix stopped with "Demucs that bai"** (`--clip-mode: invalid choice: 'none'`). The AI runtime installs Demucs 4.0.1, whose command line has no `none` option. The engine now starts Demucs so that it accepts it. Stems are still saved without clipping, so they add up exactly to the original song.
+- **No more double clicks.** A button turns off while its work runs and comes back when it is done. While a job runs (find, download, check, remix, MP4, cut, Install AI, export), every button that starts a job is off, because PlaylistKit runs one job at a time.
+
 ## 0.2.2
 
 - **Check for updates** button in the header and in Settings, which shows the current version, the latest one and when it last checked.

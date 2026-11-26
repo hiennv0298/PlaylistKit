@@ -70,7 +70,7 @@ const html = `
   <button class="btn small" onclick="edReset()" title="Thumbnail + mix + now playing">Reset layout</button>
   <button class="btn small" onclick="edFrame()">Check frame</button>
   <select class="input sm" id="edRes"><option>480p</option><option selected>720p</option><option>1080p</option></select>
-  <button class="btn primary" onclick="edExport()">⬆ Export</button>
+  <button class="btn primary" data-job onclick="edExport()">⬆ Export</button>
 </div>
 <div class="ed-main">
   <aside class="ed-media">
@@ -473,10 +473,11 @@ window.edSeek = t => { ED.t = Math.max(0, Math.min(dur(), t)); if (ED.playing) {
 
 // ---------------------------------------------------------------- export
 window.edExport = async () => { await saveNow(); if (!dur()) return toast('The timeline is empty.');
-  pause(); startJob('/api/edit/export', {id: P.id, edit: ED.edit}); };
+  pause(); await startJob('/api/edit/export', {id: P.id, edit: ED.edit}); };
 window.edFrame = async () => {
   await saveNow(); const r = await api('/api/edit/frame', {id: P.id, edit: ED.edit, at: ED.t});
   $('notesTitle').textContent = `Exported frame at ${fmtT(ED.t)}`;
   $('notesBody').innerHTML = `<img src="${r.url}" style="width:100%;border-radius:8px">`; $('notes').hidden = false;
 };
+busyWhile('openEditor', 'edReset', 'edFrame', 'edExport', 'edImport', 'edDeleteMedia');
 })();

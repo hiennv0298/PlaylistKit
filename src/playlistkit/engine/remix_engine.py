@@ -351,12 +351,35 @@ def load_plan(an: dict, work: Path, opts) -> list[str]:
 
 
 # ----------------------------------------------------------------------------- stems
+# The stems must not be clipped or rescaled (add_residual makes them sum exactly to the original).
+# Demucs 4.0.1's save_audio supports clip="none", but its command line only offers rescale/clamp,
+# so Demucs is started through this launcher, which adds "none" to the accepted choices when missing.
+DEMUCS_LAUNCHER = """
+import sys
+import demucs.separate as sep
+
+_get_parser = sep.get_parser
+
+
+def get_parser():
+    parser = _get_parser()
+    for action in parser._actions:
+        if "--clip-mode" in action.option_strings and action.choices and "none" not in action.choices:
+            action.choices = [*action.choices, "none"]
+    return parser
+
+
+sep.get_parser = get_parser
+sep.main(sys.argv[1:])
+"""
+
+
 def separate(ids: list[str], work: Path, device: str) -> None:
     todo = [t for t in ids if not all((work / "stems" / "htdemucs" / t / f"{s}.wav").exists() for s in STEMS)]
     if not todo:
         return
     log(f"  tach stem {len(todo)} bai bang Demucs ({device})...")
-    base = [sys.executable, "-m", "demucs", "-n", "htdemucs", "--float32", "--clip-mode", "none",
+    base = [sys.executable, "-c", DEMUCS_LAUNCHER, "-n", "htdemucs", "--float32", "--clip-mode", "none",
             "-o", str(work / "stems")]
     files = [str(work / "decoded" / f"{t}.wav") for t in todo]
     r = subprocess.run(base + ["-d", device] + files)

@@ -33,6 +33,9 @@
     white-space: nowrap; transition: background .15s, border-color .15s, opacity .15s; }
   .btn:hover { background: #2a2433; border-color: #4a4057; }
   .btn:disabled { opacity: .45; cursor: default; }
+  .btn.pending { cursor: progress; }
+  /* while a background job runs, every button that starts a job is off (one job at a time) */
+  body.job-busy [data-job] { opacity: .45; pointer-events: none; }
   .btn.primary { border: 0; background: linear-gradient(135deg, var(--accent), var(--accent-2)); font-weight: 600;
     box-shadow: 0 6px 18px rgba(224, 83, 61, .25); }
   .btn.primary:hover { filter: brightness(1.08); }
@@ -117,7 +120,7 @@
   <div id="updbar" class="card" hidden>
     <div style="flex:1"><b id="updTitle"></b> <span class="muted small" id="updSub"></span></div>
     <button class="btn small" onclick="showNotes()">What's new</button>
-    <button class="btn small primary" id="updGo" onclick="installUpdate()">Update now</button>
+    <button class="btn small primary" id="updGo" data-job onclick="installUpdate()">Update now</button>
     <button class="btn small ghost" onclick="hideUpdate()">Later</button>
   </div>
 
@@ -132,7 +135,7 @@
         <input class="input" id="newName" placeholder="Project name (optional)" style="width:260px">
         <button class="btn primary big" onclick="createProject()">Create playlist</button>
         <span class="muted">or</span>
-        <button class="btn" onclick="createFromFolder()">Use a folder of songs…</button>
+        <button class="btn" data-job onclick="createFromFolder()">Use a folder of songs…</button>
       </div>
     </div>
 
@@ -144,7 +147,7 @@
           <div class="row"><button class="btn small" onclick="pickQuick('image')">Image…</button><span class="ell small" id="qImage">no image</span></div>
           <div class="row"><button class="btn small" onclick="pickQuick('audio')">Audio…</button><span class="ell small" id="qAudio">no audio</span></div>
           <div class="row" id="qRes"></div>
-          <div class="row"><button class="btn primary" onclick="quickVideo()">Make MP4</button></div>
+          <div class="row"><button class="btn primary" data-job onclick="quickVideo()">Make MP4</button></div>
         </div>
       </div>
       <div class="card pad">
@@ -187,7 +190,7 @@
           <label class="field" style="flex:1;min-width:280px"><span>Optional: your own search words, a SoundCloud set / YouTube playlist link, or a folder</span>
             <input class="input sm" id="fExtra" placeholder="e.g. https://soundcloud.com/someone/sets/indie-viet"></label>
           <label class="chk" style="margin-top:18px"><input type="checkbox" id="fUsedArtists"> allow artists used before</label>
-          <button class="btn primary" style="margin-top:18px" onclick="findSongs()">Find songs</button>
+          <button class="btn primary" style="margin-top:18px" data-job onclick="findSongs()">Find songs</button>
         </div>
         <div class="note warn small" id="pRisk" style="margin-top:12px"></div>
       </div>
@@ -195,14 +198,14 @@
       <div class="card pad" style="margin-top:16px" id="candBox" hidden>
         <div class="row"><h2 style="margin:0">Found</h2><span class="muted small" id="candInfo"></span><div class="spacer"></div>
           <label class="chk small"><input type="checkbox" id="showSkipped" onchange="renderCands()"> show filtered</label>
-          <button class="btn primary" onclick="downloadSel()">Download selected</button></div>
+          <button class="btn primary" data-job onclick="downloadSel()">Download selected</button></div>
         <div class="tablewrap" style="margin-top:10px"><table><thead><tr><th></th><th>Song</th><th>Source</th><th>Rights</th><th>Length</th><th>Plays</th><th>Note</th></tr></thead><tbody id="candRows"></tbody></table></div>
       </div>
 
       <div class="card pad" style="margin-top:16px">
         <div class="row"><h2 style="margin:0">Songs in this playlist</h2><span class="muted small" id="songInfo"></span><div class="spacer"></div>
           <button class="btn small" onclick="api('/api/open',{id:P.id,area:'song'})">Open songs folder</button>
-          <button class="btn" onclick="startJob('/api/screen',{id:P.id})">Check songs</button></div>
+          <button class="btn" data-job onclick="startJob('/api/screen',{id:P.id})">Check songs</button></div>
         <p class="faint small">Songs marked red usually sound wrong in this genre (heavy 808 sub-bass, low quality, duplicates). Removing a song sends it to the Recycle Bin and adds it to the backlog so it is never downloaded again.</p>
         <audio id="songPlayer" controls hidden></audio>
         <div class="tablewrap"><table><thead><tr><th>Song</th><th>Length</th><th>Sub-bass</th><th>Check</th><th></th></tr></thead><tbody id="songRows"></tbody></table></div>
@@ -217,7 +220,7 @@
           <label class="chk" style="margin-top:18px"><input type="checkbox" id="rKey"> allow key changes</label>
           <label class="field"><span>Max tempo change</span><select class="input" id="rStretch"><option value="0.04">4%</option><option value="0.08">8%</option><option value="0.12">12%</option></select></label>
           <label class="field"><span>Transition (s)</span><input class="input" id="rTrans" type="number" value="14" min="4" max="40" style="width:80px"></label>
-          <button class="btn primary big" style="margin-top:18px" onclick="remix()">Remix</button>
+          <button class="btn primary big" style="margin-top:18px" data-job onclick="remix()">Remix</button>
         </div>
         <p class="faint small" id="styleHelp"></p>
         <div class="note small" id="aiNote" style="margin-top:8px">…</div>
@@ -247,7 +250,7 @@
           <img class="thumb" id="thumbImg" alt="" hidden>
           <div class="row" style="margin-top:10px"><button class="btn" onclick="pickThumb()">Choose thumbnail…</button><span class="muted small" id="thumbName"></span></div>
           <div class="row" style="margin-top:12px" id="vRes"></div>
-          <div class="row" style="margin-top:12px"><button class="btn primary big" onclick="makeVideo()">Make MP4</button></div>
+          <div class="row" style="margin-top:12px"><button class="btn primary big" data-job onclick="makeVideo()">Make MP4</button></div>
           <p class="faint small">Still image + the mix, 2 fps H.264 + AAC 384k, made for YouTube. Non-16:9 images sit on a blurred copy of themselves.</p>
           <div class="note small" style="margin-top:10px">Want titles, a sound wave, a progress bar, several pictures or your own clips?
             <button class="btn small primary" onclick="openEditor()">Open the video editor</button></div>
@@ -262,7 +265,7 @@
         <h2>Cut Content ID claims</h2>
         <p class="muted small" style="margin-top:-6px">Paste the claim times from YouTube Studio (Copyright → See details). PlaylistKit finds the songs, removes them from the mix without re-rendering, then updates the tracklist, the description and the backlog.</p>
         <textarea class="input" id="cidText" rows="7" style="width:100%" placeholder="47:48 — 51:52&#10;1:06:09 — 1:09:29"></textarea>
-        <div class="row" style="margin-top:10px"><button class="btn" onclick="cidPreview()">Preview</button><button class="btn primary" id="cidGo" onclick="cidApply()" disabled>Cut these songs</button></div>
+        <div class="row" style="margin-top:10px"><button class="btn" onclick="cidPreview()">Preview</button><button class="btn primary" id="cidGo" data-job onclick="cidApply()" disabled>Cut these songs</button></div>
         <div id="cidOut" style="margin-top:14px"></div>
       </div>
     </div>
@@ -290,7 +293,7 @@
       <div class="field"><span>AI runtime for the remix (PyTorch + Demucs)</span>
         <div class="note small" id="sAi">…</div>
         <div class="row"><input class="input" id="sAiPy" placeholder="optional: an existing python.exe that has torch + demucs" style="flex:1"><button class="btn small" onclick="checkAi()">Check</button></div>
-        <div class="row"><button class="btn primary small" onclick="installAi()">Install AI (about 2.5 GB)</button>
+        <div class="row"><button class="btn primary small" data-job onclick="installAi()">Install AI (about 2.5 GB)</button>
           <label class="field" style="flex-direction:row;align-items:center;gap:8px"><span>Device</span><select class="input sm" id="sDevice"><option value="cuda">NVIDIA GPU</option><option value="cpu">CPU</option></select></label>
           <label class="chk small"><input type="checkbox" id="sLow"> low priority (lets games or video editors go first)</label></div></div>
       <div class="field"><span>Updates</span>
@@ -380,14 +383,14 @@ async function createProject() {
 async function createFromFolder() {
   const r = await api('/api/pick', {kind: 'folder'}); if (!r.path) return;
   const p = await api('/api/project/create', {genre: NEW_GENRE, name: $('newName').value || r.path.split(/[\\/]/).pop(), songs_dir: r.path});
-  await openProject(p.id); startJob('/api/screen', {id: p.id});
+  await openProject(p.id); await startJob('/api/screen', {id: p.id});
 }
 async function pickQuick(kind) {
   const r = await api('/api/pick', {kind}); if (!r.path) return; QUICK[kind] = r.path;
   $(kind === 'image' ? 'qImage' : 'qAudio').textContent = r.path;
 }
 function resOf(pfx) { return [...document.querySelectorAll('.' + pfx + 'res:checked')].map(x => x.value); }
-function quickVideo() { startJob('/api/video', {image: QUICK.image, audio: QUICK.audio, resolutions: resOf('q')}); }
+function quickVideo() { return startJob('/api/video', {image: QUICK.image, audio: QUICK.audio, resolutions: resOf('q')}); }
 
 // ---------------------------------------------------------------- project
 async function openProject(id) {
@@ -411,7 +414,7 @@ let AI_SEARCH = null;  // result of the one PC-wide search per session (it takes
 function aiHtml(a) {
   const dev = x => `torch ${esc(x.torch)}, ${x.cuda ? 'GPU (CUDA)' : 'CPU only'}`;
   const gpu = a.gpu ? ' · ' + esc(a.gpu) : '';
-  const install = `<button class="btn small primary" onclick="installAi()">Install AI</button>`;
+  const install = `<button class="btn small primary" data-job onclick="installAi()">Install AI</button>`;
   if (a.state === 'ready') return `✓ Installed and set. AI runtime ready: ${dev(a)}${gpu}<br><span class="faint">AI Python: ${esc(a.python)}</span>`;
   if (a.state === 'found') return (a.setting ? `The AI Python in Settings does not work (${esc(a.error)}). A working install was found: <b>`
     : `Installed, but not set as the AI Python: <b>`) + `${esc(a.found.python)}</b> (${dev(a.found)}).
@@ -444,7 +447,7 @@ async function deleteProject() { if (!confirm(`Move the playlist "${P.name}" and
   await api('/api/project/delete', {id: P.id}); goHome(); }
 function findSongs() {
   const sources = [...document.querySelectorAll('.src:checked')].map(x => x.value);
-  startJob('/api/find', {id: P.id, sources, count: +$('fCount').value, extra: $('fExtra').value, allow_used_artists: $('fUsedArtists').checked});
+  return startJob('/api/find', {id: P.id, sources, count: +$('fCount').value, extra: $('fExtra').value, allow_used_artists: $('fUsedArtists').checked});
 }
 function renderCands() {
   const c = P.candidates || []; $('candBox').hidden = !c.length; if (!c.length) return;
@@ -460,7 +463,7 @@ function renderCands() {
 async function saveSel() { const sel = [...document.querySelectorAll('.cand:checked')].map(x => x.value);
   await api('/api/candidates', {id: P.id, selected: sel}); P.candidates.forEach(c => c.selected = sel.includes(c.source + ':' + c.sid));
   $('candInfo').textContent = `${sel.length} selected`; }
-async function downloadSel() { await saveSel(); startJob('/api/download', {id: P.id}); }
+async function downloadSel() { await saveSel(); await startJob('/api/download', {id: P.id}); }
 function renderSongs() {
   const s = P.song_list || []; const total = s.reduce((a, x) => a + (x.duration || 0), 0);
   $('songInfo').textContent = `${s.length} songs · about ${Math.round(total / 60)} min before mixing`;
@@ -474,7 +477,7 @@ function renderSongs() {
 function playSong(f) { const a = $('songPlayer'); a.hidden = false; a.src = `/files/${P.id}/song/${f}`; a.play(); }
 async function removeSong(f, sel) { const reason = sel.value; if (!reason) return;
   await api('/api/song/remove', {id: P.id, file: decodeURIComponent(f), reason}); refresh(); }
-function remix() { startJob('/api/remix', {id: P.id, style: $('rStyle').value, keyshift: $('rKey').checked, max_stretch: +$('rStretch').value, transition: +$('rTrans').value, reorder: true}); }
+function remix() { return startJob('/api/remix', {id: P.id, style: $('rStyle').value, keyshift: $('rKey').checked, max_stretch: +$('rStretch').value, transition: +$('rTrans').value, reorder: true}); }
 function renderMix() {
   $('mixBox').hidden = !P.mix.mp3 && !P.mix.wav; if ($('mixBox').hidden) return;
   $('mixPlayer').src = `/files/${P.id}/out/${encodeURIComponent(P.mix.mp3 || P.mix.wav)}`;
@@ -495,7 +498,7 @@ async function saveMeta(withTracks) {
   const r = await api('/api/meta', body); P.meta_text = r.text; P.title_name = r.name; P.tracks = r.tracks; renderMeta();
 }
 async function pickThumb() { const r = await api('/api/pick', {kind: 'image'}); if (!r.path) return; await api('/api/thumb', {id: P.id, path: r.path}); refresh(); }
-function makeVideo() { startJob('/api/video', {id: P.id, resolutions: resOf('v')}); }
+function makeVideo() { return startJob('/api/video', {id: P.id, resolutions: resOf('v')}); }
 async function cidPreview() {
   const r = await api('/api/cut/preview', {id: P.id, text: $('cidText').value});
   $('cidOut').innerHTML = `<h3>${r.claimed.length} songs will be removed</h3>` + r.claimed.map(c => `<div>• <span class="muted">${c.ts}</span> ${esc(c.name)}</div>`).join('') +
@@ -503,11 +506,41 @@ async function cidPreview() {
   $('cidGo').disabled = false;
 }
 function cidApply() { if (!confirm('Cut these songs from the mix? The songs go to the Recycle Bin and are marked "claimed" in the backlog.')) return;
-  $('cidGo').disabled = true; startJob('/api/cut/apply', {id: P.id, text: $('cidText').value}); }
+  $('cidGo').disabled = true; return startJob('/api/cut/apply', {id: P.id, text: $('cidText').value}); }
 
 // ---------------------------------------------------------------- jobs
 let JOB_HIDDEN = false;
-async function startJob(path, body) { $('jobErr').textContent = ''; await api(path, body); JOB_HIDDEN = false; $('jobbar').hidden = false; LAST_PHASE = 'busy'; poll(true); }
+async function startJob(path, body) {
+  if (document.body.classList.contains('job-busy')) return toast('PlaylistKit is already working. Wait for it to finish or press Stop.');
+  $('jobErr').textContent = ''; await api(path, body); setJobBusy(true); JOB_HIDDEN = false; $('jobbar').hidden = false; LAST_PHASE = 'busy'; poll(true); }
+function setJobBusy(busy) { document.body.classList.toggle('job-busy', !!busy); }
+
+// ---------------------------------------------------------------- no double clicks
+// A clicked button stays disabled until the work behind it has finished (its handler's promise settles).
+let BUSY_EVENT = null;  // the click being handled: wrapped functions it calls (remix -> startJob) pass straight through
+function busyWhile(...names) {
+  for (const name of names) {
+    const f = window[name];
+    if (typeof f !== 'function' || f.busyWrapped) continue;
+    const w = function (...args) {
+      const ev = window.event;
+      if (ev && ev === BUSY_EVENT) return f.apply(this, args);
+      const b = ev && ev.type === 'click' && ev.target && ev.target.closest ? ev.target.closest('button') : null;
+      if (b && b.hasAttribute('data-job') && document.body.classList.contains('job-busy')) return;
+      if (b && b.classList.contains('pending')) return;  // still working on the last click
+      if (b) b.classList.add('pending');
+      let r;
+      BUSY_EVENT = ev;
+      try { r = f.apply(this, args); } catch (e) { if (b) b.classList.remove('pending'); throw e; } finally { BUSY_EVENT = null; }
+      if (!b) return r;
+      if (!(r && typeof r.then === 'function')) { b.classList.remove('pending'); return r; }
+      const mine = !b.disabled; if (mine) b.disabled = true;
+      r.catch(() => {}).finally(() => { b.classList.remove('pending'); if (mine) b.disabled = false; });
+      return r;
+    };
+    w.busyWrapped = true; window[name] = w;
+  }
+}
 let pollTimer = null, FAILS = 0, GONE = false, UPDATING = false;
 function showGone() {
   if (GONE) return; GONE = true; clearTimeout(pollTimer);
@@ -533,7 +566,7 @@ async function poll(now) {
       if (window.edOnJobDone) edOnJobDone();
       else if (P) refresh();
     }
-    LAST_PHASE = s.busy ? 'busy' : s.phase;
+    LAST_PHASE = s.busy ? 'busy' : s.phase; setJobBusy(s.busy);
     FAILS = 0;
   } catch (e) { if (++FAILS >= 3) showGone(); }
   if (!GONE) pollTimer = setTimeout(poll, 1000);
@@ -568,7 +601,7 @@ async function saveSettings() {
   $('settings').hidden = true; if (P) refresh(); else goHome();
 }
 function installAi() { if (!confirm('Download and install PyTorch + Demucs (about 2.5 GB) into PlaylistKit\'s own folder? It takes 5-15 minutes, and the AI Python is set for you when it finishes.')) return;
-  $('settings').hidden = true; startJob('/api/ai/install', {}); }
+  $('settings').hidden = true; return startJob('/api/ai/install', {}); }
 
 // ---------------------------------------------------------------- updates
 let WN_SHOWN = false;
@@ -608,7 +641,7 @@ async function checkUpdates(force) {
 function updNote(u) {
   const when = u.checked_at ? new Date(u.checked_at * 1000).toLocaleString() : 'never';
   $('sUpdNote').innerHTML = u.error ? esc(u.error)
-    : u.newer ? `PlaylistKit ${esc(u.latest)} is available (you have ${esc(u.current)}). <button class="btn small primary" onclick="$('settings').hidden=true;installUpdate()">${u.can_install ? 'Update now' : 'Download'}</button>`
+    : u.newer ? `PlaylistKit ${esc(u.latest)} is available (you have ${esc(u.current)}). <button class="btn small primary" data-job onclick="$('settings').hidden=true;installUpdate()">${u.can_install ? 'Update now' : 'Download'}</button>`
     : `You have the latest version (${esc(u.current)}). Last checked: ${esc(when)}.`;
 }
 async function checkUpdatesHere() {
@@ -624,6 +657,9 @@ async function installUpdate() {
   else api('/api/link', {url: UPD.page});
 }
 window.addEventListener('pagehide', () => navigator.sendBeacon('/api/bye', '{}'));
+busyWhile('startJob', 'createProject', 'createFromFolder', 'pickQuick', 'quickVideo', 'openProject', 'findSongs', 'downloadSel',
+  'remix', 'makeVideo', 'saveMeta', 'pickThumb', 'cidPreview', 'cidApply', 'deleteProject', 'installAi', 'useAi', 'checkAi',
+  'pickInto', 'saveSettings', 'openSettings', 'checkUpdates', 'checkUpdatesHere', 'installUpdate', 'updateProject');
 init();
 </script>
 <script src="/editor.js"></script>
