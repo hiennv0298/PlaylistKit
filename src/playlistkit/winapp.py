@@ -1,9 +1,12 @@
 """Give the app window its own taskbar button on Windows.
 
 The window is Edge/Chrome in app mode, so Windows groups it with every other
-Edge app window (ClipKit, web apps...) under one taskbar button. Setting our own
+Edge app window (ClipKit, CommentKit, web apps...) under one taskbar button. Setting our own
 AppUserModelID on the window (through its property store) gives PlaylistKit a
 separate button with its own icon, and makes "Pin to taskbar" pin PlaylistKit.
+Edge keeps setting its own ID (from the window's host), so keep_window_tagged() puts
+ours back for as long as the app runs, and gui.py opens the window at its own host
+(playlistkit.localhost) so even Edge's ID is PlaylistKit's alone.
 """
 from __future__ import annotations
 
@@ -79,7 +82,32 @@ def set_window_app_id(hwnd: int, app_id: str, relaunch: str = "", icon: str = ""
         release(store)
 
 
-def _find_windows(title: str, since: float) -> list[int]:
+def get_window_app_id(hwnd: int) -> str | None:
+    """The window's AppUserModelID ('' when it has none, None when it cannot be read)."""
+    shell32 = ctypes.windll.shell32
+    ole32 = ctypes.windll.ole32
+    ole32.CoInitialize(None)
+    store = c_void_p()
+    if shell32.SHGetPropertyStoreForWindow(wintypes.HWND(hwnd), byref(IID_IPropertyStore), byref(store)) != 0:
+        return None
+    vtbl = ctypes.cast(ctypes.cast(store, POINTER(c_void_p))[0], POINTER(c_void_p))
+    get_value = WINFUNCTYPE(ctypes.HRESULT, c_void_p, POINTER(PROPERTYKEY), POINTER(PROPVARIANT))(vtbl[5])
+    release = WINFUNCTYPE(c_ulong, c_void_p)(vtbl[2])
+    pv = PROPVARIANT()
+    try:
+        get_value(store, byref(PKEY_APP_ID), byref(pv))
+        value = ctypes.wstring_at(pv.p) if pv.vt == VT_LPWSTR and pv.p else ""
+        ole32.PropVariantClear(byref(pv))
+        return value
+    except OSError:
+        return None
+    finally:
+        release(store)
+
+
+def _find_windows(title: str, since: float = 0.0) -> list[int]:
+    """Visible browser windows (Chrome_WidgetWin*: Edge or Chrome) with this exact title. The class check keeps
+    out a File Explorer window of a folder that happens to be called PlaylistKit."""
     user32 = ctypes.windll.user32
     found: list[int] = []
 
@@ -90,7 +118,10 @@ def _find_windows(title: str, since: float) -> list[int]:
             buf = ctypes.create_unicode_buffer(n + 1)
             user32.GetWindowTextW(hwnd, buf, n + 1)
             if buf.value == title:
-                found.append(int(hwnd))
+                cls = ctypes.create_unicode_buffer(64)
+                user32.GetClassNameW(hwnd, cls, 64)
+                if cls.value.startswith("Chrome_WidgetWin"):
+                    found.append(int(hwnd))
         return True
 
     user32.EnumWindows(each, 0)
@@ -109,21 +140,33 @@ def relaunch_target() -> tuple[str, str]:
     return f'"{pyw if pyw.is_file() else sys.executable}" -m playlistkit', str(ico)
 
 
-def tag_window_later(timeout: float = 20.0) -> None:
-    """Wait for the app window to appear, then give it PlaylistKit's own taskbar identity."""
-    if os.name != "nt":
+_TAGGING = threading.Event()
+
+
+def keep_window_tagged(fast_for: float = 20.0, every: float = 2.0) -> None:
+    """Give PlaylistKit's windows their own taskbar identity, and keep giving it while the app runs.
+
+    Tagging once is not enough: Edge sets an app window's ID from the address's host and path
+    (MSEdge.127.0.0.1_/ when the window is at 127.0.0.1), after we tagged it and again later. Every
+    app on 127.0.0.1 then shares one taskbar button. So this checks every few seconds and puts our
+    ID back when it has changed. It looks quickly at first, while the window opens."""
+    if os.name != "nt" or _TAGGING.is_set():
         return
+    _TAGGING.set()
 
     def work() -> None:
         start = time.time()
-        done: set[int] = set()
         cmd, icon = relaunch_target()
-        while time.time() - start < timeout:
-            for hwnd in _find_windows(TITLE, start):
-                if hwnd not in done and set_window_app_id(hwnd, APP_ID, cmd, icon, TITLE):
-                    done.add(hwnd)
-            if done:
-                return
-            time.sleep(0.4)
+        while True:
+            try:
+                for hwnd in _find_windows(TITLE):
+                    if get_window_app_id(hwnd) != APP_ID:
+                        set_window_app_id(hwnd, APP_ID, cmd, icon, TITLE)
+            except OSError:
+                pass
+            time.sleep(0.4 if time.time() - start < fast_for else every)
 
-    threading.Thread(target=work, daemon=True).start()
+    threading.Thread(target=work, name="taskbar-id", daemon=True).start()
+
+
+tag_window_later = keep_window_tagged  # the name used up to 0.2.7

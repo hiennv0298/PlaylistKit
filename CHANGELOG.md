@@ -3,6 +3,13 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.8
+
+- **Fixed: other apps were grouped under PlaylistKit's taskbar button** (CommentKit, ClipKit, anything else running on 127.0.0.1).
+  - The cause: Edge replaced PlaylistKit's own taskbar ID with one named after the window's address, `MSEdge.127.0.0.1_/`, which every local app shares.
+  - PlaylistKit now opens at its own address, `playlistkit.localhost`, and keeps putting its taskbar ID back while it runs. Pinning and the icon stay PlaylistKit's.
+- **Fixed: two PlaylistKits could listen on the same port** (for example the old and the new one around an update). Requests then went to either one at random. The port is now PlaylistKit's alone; a second start uses another port.
+
 ## 0.2.7
 
 - **Only music I can monetize** (Songs tab). Finds only songs whose licence allows a monetized remix: CC BY, CC BY-SA, CC0 and public domain.

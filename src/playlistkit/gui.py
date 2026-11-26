@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -32,6 +33,7 @@ from playlistkit.util import (IMAGE_EXT, Cancelled, PlaylistKitError, add_log_si
 WEBUI = Path(__file__).with_name("webui")
 SETTINGS_FILE = "settings.json"
 SERVER_FILE = "app-server.json"
+APP_HOST = "playlistkit.localhost"  # the window's own host: see app_url()
 DEFAULTS = {"projects_dir": str(default_projects_dir()), "backlog_path": "", "banned_artists": "",
             "jamendo_client_id": "", "ai_python": "", "device": "cuda", "low_priority": True,
             "check_updates": True, "sources": "soundcloud,audius,jamendo,archive,ccmixter", "count": 30,
@@ -505,7 +507,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _host_ok(self) -> bool:
         port = self.server.server_address[1]
-        return self.headers.get("Host", "") in (f"127.0.0.1:{port}", f"localhost:{port}")
+        return self.headers.get("Host", "") in (f"127.0.0.1:{port}", f"localhost:{port}", f"{APP_HOST}:{port}")
 
     def _send(self, code: int, body: bytes, ctype: str) -> None:
         self.send_response(code)
@@ -955,11 +957,30 @@ def open_window(url: str) -> None:
     if exe:
         extra = os.environ.get("PLAYLISTKIT_BROWSER_ARGS", "").split()
         subprocess.Popen([exe, f"--app={url}", "--window-size=1300,920", *extra])
-        from playlistkit.winapp import tag_window_later
+        from playlistkit.winapp import keep_window_tagged
 
-        tag_window_later()  # own taskbar button instead of being grouped with other Edge app windows
+        keep_window_tagged()  # own taskbar button instead of being grouped with other Edge app windows
     else:
         webbrowser.open(url)
+
+
+def app_url(port: int) -> str:
+    """The window's address. Its own host, not 127.0.0.1: Edge names an app window's taskbar ID after the
+    host (MSEdge.<host>_/), so at 127.0.0.1 every local app (ClipKit, CommentKit...) shared one button.
+    Edge and Chrome always send *.localhost to this computer, and the server still listens on 127.0.0.1."""
+    return f"http://{APP_HOST}:{port}/"
+
+
+class AppServer(ThreadingHTTPServer):
+    """Owns its port alone. ThreadingHTTPServer sets SO_REUSEADDR, and on Windows that lets a second process
+    bind the same port without an error, so two PlaylistKits (or an old and a new one after an update)
+    could both listen and answer requests at random. With SO_EXCLUSIVEADDRUSE the second bind fails."""
+    allow_reuse_address = False
+
+    def server_bind(self) -> None:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def _running_instance() -> str | None:
@@ -967,7 +988,7 @@ def _running_instance() -> str | None:
         port = int(read_json(app_home() / SERVER_FILE)["port"])
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/ping", timeout=1.5) as resp:
             if json.loads(resp.read()).get("app") == "playlistkit":
-                return f"http://127.0.0.1:{port}/"
+                return app_url(port)
     except (OSError, ValueError, KeyError, TypeError):
         pass
     return None
@@ -1028,13 +1049,13 @@ def main() -> int:
     server = None
     if relaunch and not port:
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", relaunch), Handler)
+            server = AppServer(("127.0.0.1", relaunch), Handler)
         except OSError:  # the port is taken: start normally and open a new window
             relaunch = None
-    server = server or ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    server = server or AppServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
     SERVER = server
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    url = app_url(server.server_address[1])
     try:
         write_json(app_home() / SERVER_FILE, {"port": server.server_address[1], "pid": os.getpid()})
     except OSError:
@@ -1043,6 +1064,9 @@ def main() -> int:
     threading.Thread(target=_watchdog, args=(server,), daemon=True).start()
     updates.start_background_check(lambda: load_settings()["check_updates"])
     if not os.environ.get("PLAYLISTKIT_GUI_NO_WINDOW"):
+        from playlistkit.winapp import keep_window_tagged
+
+        keep_window_tagged()  # also the window an update reloads, and windows a second start opens
         if relaunch:
             threading.Thread(target=_open_window_unless_reloaded, args=(url,), daemon=True).start()
         else:
