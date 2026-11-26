@@ -3,6 +3,15 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.6
+
+- **Better thumbnails, without the length.**
+  - The line under the title is now your choice: nothing (the new default), the artists in the playlist, the length, or your own text. Thumbnails PlaylistKit made by itself are redrawn without the length.
+  - Bigger titles: a short name fills the picture.
+  - Title effects made for each background: gradient with glow, glow, outline or shadow. A picture from the playlist gets an outline.
+  - Three new backgrounds: **City night** (now the default for rap, hip-hop and phonk), **Vinyl record** (R&B, jazz, bossa nova) and **Aurora** (sleep, meditation). Synthwave has mountains on the horizon.
+  - The genre emoji sits in the top line, with a short line on each side.
+
 ## 0.2.5
 
 - **DJ settings on the Remix tab, for every genre.**
