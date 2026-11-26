@@ -3,6 +3,13 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.1
+
+- **AI runtime check on the Remix tab and in Settings** now tells apart: installed and set, installed but not set, a broken AI Python path, and not installed.
+- **Finds an existing install by itself:** PlaylistKit's own AI folder, then Pythons on this PC (PATH, the `py` launcher, python.org installs, conda/miniforge, the active venv) that already have torch + demucs.
+- **Use it** button sets the AI Python to the install it found, in one click. A working path typed in Settings can be saved the same way.
+- **Install AI sets the AI Python for you** when it finishes, and **Remix** sets it by itself when the runtime is installed but not set yet.
+
 ## 0.2.0
 
 - **Video editor** (🎬 Video editor on a playlist): a media library, a preview and a timeline, like a small Clipchamp.

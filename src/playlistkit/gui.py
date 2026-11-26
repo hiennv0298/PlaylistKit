@@ -242,11 +242,18 @@ def job_remix(pid: str, style: str, opts: dict) -> dict:
     if len(files) < 2:
         raise PlaylistKitError("Add at least 2 songs first.")
     s = load_settings()
-    py = runtime.find_python(s["ai_python"])
-    st = runtime.check_python(py) if py else {"ok": False}
-    if not st.get("ok"):
+    st = runtime.status(s["ai_python"])
+    if not st["ok"] and st["found"]:  # installed but the setting does not point at it: set it now
+        save_settings({"ai_python": st["found"]["python"]})
+        log(f"AI Python set to {st['found']['python']}")
+        st = {**st["found"], "ok": True}
+    if not st["ok"]:
+        if st["state"] == "broken":
+            raise PlaylistKitError(f"The AI Python in Settings does not work ({st['error']}). "
+                                   "Open Settings and fix it, or press Install AI.")
         raise PlaylistKitError("The AI runtime (PyTorch + Demucs) is not installed yet. "
                                "Open Settings and press Install AI, or set an existing AI Python.")
+    py = Path(st["python"])
     p.data["style"] = style
     p.save()
     g = GENRES[p.genre]
@@ -336,7 +343,8 @@ def job_install_ai() -> dict:
             STATE.set(min(0.95, STATE.progress / 100 + 0.01), line[:120])
 
     res = runtime.install(on_line)
-    save_settings({"ai_python": ""})
+    save_settings({"ai_python": str(runtime.managed_python())})
+    on_line(f"AI Python set to {runtime.managed_python()}")
     return res
 
 
@@ -565,7 +573,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/ai":
                 from playlistkit import runtime
 
-                return self._json(runtime.status(load_settings()["ai_python"]))
+                search = query.get("search", ["0"])[0] == "1"
+                return self._json(runtime.status(load_settings()["ai_python"], search=search))
             if path == "/api/backlog":
                 return self._json(backlog().summary())
             if path.startswith("/files/"):  # /files/<pid>/<area>/<name>  area: song | out | thumb
@@ -751,7 +760,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/ai/check":
             from playlistkit import runtime
 
-            return runtime.status(str(body.get("python") or load_settings()["ai_python"]))
+            return runtime.status(str(body.get("python") or load_settings()["ai_python"]), search=bool(body.get("search")))
+        if path == "/api/ai/use":  # point the AI Python setting at a working install
+            from playlistkit import runtime
+
+            py = str(body.get("python") or "").strip().strip('"')
+            res = runtime.check_python(py) if py else {"ok": False, "error": "no python given"}
+            if not res["ok"]:
+                raise PlaylistKitError(f"That Python cannot run the remix: {res['error']}")
+            save_settings({"ai_python": py})
+            return runtime.status(py)
         if path == "/api/stop":
             request_cancel()
             with STATE.lock:

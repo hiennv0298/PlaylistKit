@@ -61,18 +61,117 @@ def check_python(py: str | Path) -> dict:
     return {"ok": True, "torch": m.group(1), "cuda": m.group(2) == "True", "error": ""}
 
 
-def find_python(setting: str = "") -> Path | None:
-    for cand in [setting, str(managed_python())]:
-        if cand and Path(cand).is_file():
-            return Path(cand)
+HAS_PACKAGES = ("import importlib.util as u; "
+                "print('found' if all(u.find_spec(m) for m in ('torch', 'demucs')) else 'missing')")
+
+
+def _same(a: str | Path, b: str | Path) -> bool:
+    try:
+        return Path(a).resolve() == Path(b).resolve()
+    except OSError:
+        return False
+
+
+def candidates() -> list[Path]:
+    """Pythons on this PC that might hold torch + demucs: our own install first, then PATH, the py launcher,
+    python.org installs, conda/miniforge and the active venv."""
+    seen: set[str] = set()
+    out: list[Path] = []
+
+    def add(p) -> None:
+        if not p:
+            return
+        p = Path(p)
+        try:
+            key = str(p.resolve()).lower()
+        except OSError:
+            return
+        if key in seen or "windowsapps" in key or not p.is_file():  # skip the Microsoft Store stub
+            return
+        seen.add(key)
+        out.append(p)
+
+    exe = "python.exe" if os.name == "nt" else "python"
+    scripts = "Scripts" if os.name == "nt" else "bin"
+    add(managed_python())
+    for var in ("VIRTUAL_ENV", "CONDA_PREFIX"):
+        if os.environ.get(var):
+            add(Path(os.environ[var]) / scripts / exe)
+            add(Path(os.environ[var]) / exe)
+    for name in ("python", "python3"):
+        add(shutil.which(name))
+    if os.name == "nt":
+        try:
+            proc = subprocess.run(["py", "-0p"], capture_output=True, text=True, timeout=10, creationflags=NO_WINDOW)
+            for m in re.finditer(r"([A-Za-z]:\\[^\r\n*]*?python\.exe)", proc.stdout):
+                add(m.group(1).strip())
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        local = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+        for p in sorted(local.glob("Programs/Python/Python3*/python.exe"), reverse=True):
+            add(p)
+    for base in (Path.home(), Path(os.environ.get("PROGRAMDATA", "C:/ProgramData"))):
+        for conda in ("miniforge3", "miniconda3", "anaconda3", "mambaforge"):
+            for p in sorted((base / conda / "envs").glob(f"*/{exe}")):
+                add(p)
+            add(base / conda / exe)
+    return out
+
+
+def has_packages(py: str | Path) -> bool:
+    """Fast pre-check (no torch import): are torch and demucs installed in this Python?"""
+    try:
+        proc = subprocess.run([str(py), "-c", HAS_PACKAGES], capture_output=True, text=True, timeout=20,
+                              creationflags=NO_WINDOW, env=tool_env())
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return "found" in proc.stdout
+
+
+def detect(search: bool = True, skip: str = "") -> dict | None:
+    """The first working AI Python on this PC: {'python', 'torch', 'cuda', 'managed'} or None.
+    search=False only looks at PlaylistKit's own install (fast)."""
+    pool = candidates() if search else [managed_python()]
+    for py in pool:
+        if (skip and _same(py, skip)) or not py.is_file():
+            continue
+        if search and not has_packages(py):
+            continue
+        res = check_python(py)
+        if res["ok"]:
+            return {"python": str(py), "torch": res["torch"], "cuda": res["cuda"],
+                    "managed": _same(py, managed_python())}
     return None
 
 
-def status(setting: str = "") -> dict:
-    py = find_python(setting)
-    info = check_python(py) if py else {"ok": False, "error": "not installed"}
-    return {**info, "python": str(py or ""), "managed": bool(py and Path(py) == managed_python()),
-            "gpu": nvidia_gpu(), "dir": str(ai_dir())}
+def status(setting: str = "", search: bool = False) -> dict:
+    """Where the AI runtime stands. state:
+    ready     - the AI Python setting points at a working Python
+    found     - a working install exists but the setting does not point at it (offer to set it)
+    broken    - the setting points at a Python that does not work, and nothing else was found
+    missing   - nothing set, nothing installed
+    """
+    base = {"ok": False, "setting": setting, "gpu": nvidia_gpu(), "dir": str(ai_dir()),
+            "managed_path": str(managed_python()), "searched": search, "found": None, "error": ""}
+    if setting:
+        info = check_python(setting)
+        if info["ok"]:
+            return {**base, **info, "state": "ready", "python": setting, "managed": _same(setting, managed_python())}
+        base["error"] = info["error"]
+    found = detect(search, skip=setting)
+    if found:
+        return {**base, "state": "found", "found": found}
+    if setting:
+        return {**base, "state": "broken"}
+    return {**base, "state": "missing", "error": "not installed"}
+
+
+def find_python(setting: str = "") -> Path | None:
+    """The Python the remix should use: the setting when it works, else a found install."""
+    st = status(setting)
+    if st["ok"]:
+        return Path(st["python"])
+    return Path(st["found"]["python"]) if st["found"] else None
 
 
 def _uv() -> Path:

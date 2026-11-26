@@ -42,7 +42,7 @@ Remix styles: **indie** soft drums, low sub-bass, vocals forward, 4 % slower · 
 ## Install
 
 1. Download `PlaylistKit-Setup-<version>.exe` from [**Releases**](https://github.com/hiennv0298/PlaylistKit/releases/latest) (or the portable zip) and run it. No admin rights needed; FFmpeg is included.
-2. Open **PlaylistKit**. The first time you press **Remix**, install the AI runtime from **Settings → Install AI**: it downloads PyTorch + Demucs (about 2.5 GB, CUDA build when you have an NVIDIA GPU) into `%LOCALAPPDATA%\PlaylistKit\ai`. Already have a Python with torch and demucs? Point **Settings → AI Python** at it instead.
+2. Open **PlaylistKit**. The first time you press **Remix**, install the AI runtime from **Settings → Install AI**: it downloads PyTorch + Demucs (about 2.5 GB, CUDA build when you have an NVIDIA GPU) into `%LOCALAPPDATA%\PlaylistKit\ai` and sets **Settings → AI Python** for you. Already have a Python with torch and demucs? PlaylistKit looks for it and offers **Use it**, or point **Settings → AI Python** at it yourself.
 
 > The installer is not code-signed yet, so Windows SmartScreen may warn you: click **More info → Run anyway**.
 

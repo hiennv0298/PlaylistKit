@@ -396,8 +396,38 @@ async function openProject(id) {
   $('rStyle').value = P.style; $('styleHelp').textContent = STYLE_HELP[P.style] || '';
   $('rKey').checked = !['indie', 'lofi'].includes(P.style); $('rStretch').value = ['indie', 'lofi'].includes(P.style) ? '0.04' : '0.08';
   renderCands(); renderSongs(); renderMix(); renderMeta(); tab(CUR_TAB);
-  api('/api/ai').then(a => $('aiNote').innerHTML = a.ok ? `AI runtime ready: torch ${esc(a.torch)}, ${a.cuda ? 'GPU (CUDA)' : 'CPU only'}${a.gpu ? ' · ' + esc(a.gpu) : ''}`
-    : `The remix needs the AI runtime (PyTorch + Demucs). <button class="btn small primary" onclick="installAi()">Install AI</button> or set an existing Python in Settings.`);
+  loadAi();
+}
+// ---------------------------------------------------------------- AI runtime state
+// ready: the AI Python setting works · found: installed but not set (offer "Use it") · broken / missing: offer Install AI
+let AI_SEARCH = null;  // result of the one PC-wide search per session (it takes a few seconds)
+function aiHtml(a) {
+  const dev = x => `torch ${esc(x.torch)}, ${x.cuda ? 'GPU (CUDA)' : 'CPU only'}`;
+  const gpu = a.gpu ? ' · ' + esc(a.gpu) : '';
+  const install = `<button class="btn small primary" onclick="installAi()">Install AI</button>`;
+  if (a.state === 'ready') return `✓ Installed and set. AI runtime ready: ${dev(a)}${gpu}<br><span class="faint">AI Python: ${esc(a.python)}</span>`;
+  if (a.state === 'found') return (a.setting ? `The AI Python in Settings does not work (${esc(a.error)}). A working install was found: <b>`
+    : `Installed, but not set as the AI Python: <b>`) + `${esc(a.found.python)}</b> (${dev(a.found)}).
+    <button class="btn small primary" onclick="useAi(${esc(JSON.stringify(a.found.python))})">Use it</button>`;
+  if (a.state === 'broken') return `The AI Python in Settings does not work: <span class="faint">${esc(a.setting)}</span> (${esc(a.error)}).
+    No other install was found. ${install} or fix the path in Settings.`;
+  if (!a.searched) return 'Not set. Looking for an existing AI install on this PC…';
+  return `Not installed. The remix needs the AI runtime (PyTorch + Demucs). ${install} (it sets the path by itself) or set an existing Python in Settings.`;
+}
+async function loadAi(force) {
+  let a = await api('/api/ai');
+  if (!a.ok && !a.found) {
+    if (AI_SEARCH && !force && AI_SEARCH.setting === a.setting) a = AI_SEARCH;
+    else { $('aiNote').innerHTML = aiHtml(a); a = AI_SEARCH = await api('/api/ai?search=1'); }
+  }
+  $('aiNote').innerHTML = aiHtml(a);
+  return a;
+}
+async function useAi(py) {
+  const a = await api('/api/ai/use', {python: py});
+  S.ai_python = a.setting; AI_SEARCH = null;
+  if (!$('settings').hidden) { $('sAiPy').value = a.setting; $('sAi').innerHTML = aiHtml(a); }
+  if (P) $('aiNote').innerHTML = aiHtml(a);
 }
 async function refresh() { if (P) await openProject(P.id); }
 function tab(t) { CUR_TAB = t; document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.dataset.tab === t));
@@ -512,8 +542,15 @@ async function openSettings() {
 }
 async function checkAi(saved) {
   $('sAi').textContent = 'Checking…';
-  const a = await api('/api/ai/check', {python: saved === true ? S.ai_python : $('sAiPy').value});
-  $('sAi').textContent = a.ok ? `Ready: ${a.python} · torch ${a.torch} · ${a.cuda ? 'CUDA GPU' : 'CPU only'}${a.gpu ? ' · ' + a.gpu : ''}` : `Not ready (${a.error}). GPU: ${a.gpu || 'none'}`;
+  const py = saved === true ? S.ai_python : $('sAiPy').value.trim();
+  let a = await api('/api/ai/check', {python: py});
+  if (!a.ok && !a.found) { $('sAi').innerHTML = aiHtml(a); a = await api('/api/ai/check', {python: py, search: true}); }
+  if (a.ok && py !== S.ai_python) {  // a typed path that works: offer to save it right away
+    $('sAi').innerHTML = `This Python works (torch ${esc(a.torch)}, ${a.cuda ? 'GPU (CUDA)' : 'CPU only'}) but is not saved yet.
+      <button class="btn small primary" onclick="useAi(${esc(JSON.stringify(py))})">Use it</button>`;
+    return;
+  }
+  $('sAi').innerHTML = aiHtml(a);
 }
 async function pickInto(id, kind) { const r = await api('/api/pick', {kind}); if (r.path) $(id).value = r.path; }
 async function saveSettings() {
@@ -521,7 +558,7 @@ async function saveSettings() {
     jamendo_client_id: $('sJamendo').value, ai_python: $('sAiPy').value, device: $('sDevice').value, low_priority: $('sLow').checked, check_updates: $('sUpd').checked});
   $('settings').hidden = true; if (P) refresh(); else goHome();
 }
-function installAi() { if (!confirm('Download and install PyTorch + Demucs (about 2.5 GB) into PlaylistKit\'s own folder? It takes 5-15 minutes.')) return;
+function installAi() { if (!confirm('Download and install PyTorch + Demucs (about 2.5 GB) into PlaylistKit\'s own folder? It takes 5-15 minutes, and the AI Python is set for you when it finishes.')) return;
   $('settings').hidden = true; startJob('/api/ai/install', {}); }
 
 // ---------------------------------------------------------------- updates
