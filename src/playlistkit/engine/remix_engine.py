@@ -65,6 +65,8 @@ STYLES = {
     "indie": ("indie", "indie"),      # lofi cho indie: trong/bass xu ly theo stem, giong len truoc
 }
 SPEED = {None: 1.0, "lofi": 0.92, "slowed": 0.85, "nightcore": 1.2, "indie": 0.96}
+REVERB = {"lofi": (0.14, 1.8), "slowed": (0.32, 2.8)}   # fx -> (wet, decay)
+TRANSITION_TYPES = ("auto", "beat", "fade", "echo")
 
 
 # ----------------------------------------------------------------------------- utils
@@ -336,6 +338,8 @@ def best_order(an: dict, opts) -> list[str]:
 
 def load_plan(an: dict, work: Path, opts) -> list[str]:
     plan_p = work / "plan.json"
+    if getattr(opts, "order", None) == "files":       # A -> Z by file name, as the songs folder shows them
+        return list(an)
     if plan_p.exists() and not opts.reorder:
         plan = json.loads(plan_p.read_text("utf-8"))
         order = [t for t in plan.get("order", []) if t in an]
@@ -717,16 +721,23 @@ def indie_stems(st: dict) -> dict:
             "vocals": reverb(v.astype(np.float32), wet=0.18, decay=2.0)}
 
 
-def style_stems(st: dict, style: str) -> dict:
+def style_stems(st: dict, style: str, opts=None) -> dict:
+    """The style's stem treatment, then the DJ settings: kick ducking (pump) and the level of each stem."""
+    duck = getattr(opts, "duck", None)
     if style == "indie":
-        return indie_stems(st)
-    if style != "club":
-        return st
-    g = {"drums": 2.0, "bass": 2.5, "other": -1.0, "vocals": 0.5}
-    st = {k: v * db2lin(g[k]) for k, v in st.items()}
-    env = kick_env(st["drums"])
-    st["other"] = st["other"] * (1 - 0.30 * env)[:, None]
-    st["vocals"] = st["vocals"] * (1 - 0.08 * env)[:, None]
+        st = indie_stems(st)
+    elif style == "club":
+        g = {"drums": 2.0, "bass": 2.5, "other": -1.0, "vocals": 0.5}
+        st = {k: v * db2lin(g[k]) for k, v in st.items()}
+        if duck is None:
+            duck = 0.30
+    if duck:
+        env = kick_env(st["drums"])
+        st["other"] = st["other"] * (1 - duck * env)[:, None]
+        st["vocals"] = st["vocals"] * (1 - duck * (0.08 / 0.30) * env)[:, None]  # vocals duck much less
+    gains = {k: getattr(opts, f"gain_{k}", 0.0) or 0.0 for k in STEMS}
+    if any(gains.values()):
+        st = {k: v * db2lin(gains[k]) for k, v in st.items()}
     return st
 
 
@@ -768,33 +779,35 @@ def reverb(x: np.ndarray, wet: float, decay: float, seed: int = 7) -> np.ndarray
     return ((1 - 0.35 * wet) * x + wet * w).astype(np.float32)
 
 
-def lofi(x: np.ndarray) -> np.ndarray:
-    """Lofi sach cho indie: am hon, wow rat nhe, reverb nhe.
-    Khong them tieng re vinyl, hiss hay meo tieng (nghe nhu loa re)."""
-    x = sosfilt(butter(2, 70, "highpass", fs=SR, output="sos"), x, axis=0)
-    x = sosfilt(butter(1, 6500, "lowpass", fs=SR, output="sos"), x, axis=0)   # giam treble nhe, 6 dB/oct
-    # wow: dao dong cao do rat cham va rat nhe (~4 cent)
-    t = np.arange(len(x)) / SR
-    tw = t + 0.0009 * np.sin(2 * np.pi * 0.45 * t)
-    x = np.stack([np.interp(tw, t, x[:, c]) for c in range(2)], axis=1)
-    return reverb(x.astype(np.float32), wet=0.14, decay=1.8)
+def fx_speed(fx: str | None, opts=None) -> float:
+    sp = getattr(opts, "speed", None)
+    return float(sp) if sp else SPEED[fx]
 
 
-def apply_fx(x: np.ndarray, fx: str | None) -> np.ndarray:
-    if fx is None:
-        return x
-    x = change_speed(x, SPEED[fx])
-    if fx == "slowed":
-        return reverb(x, wet=0.32, decay=2.8)
-    if fx == "lofi":
-        return lofi(x)
+def apply_fx(x: np.ndarray, fx: str | None, opts=None) -> np.ndarray:
+    """The style's effect on the whole mix. DJ settings (speed, reverb, lo-fi) replace the style's own
+    values; left unset, every style sounds exactly as before."""
+    x = change_speed(x, fx_speed(fx, opts))
     if fx == "indie":
         x = sosfilt(butter(2, 35, "highpass", fs=SR, output="sos"), x, axis=0)
         x = sosfilt(butter(1, 12000, "lowpass", fs=SR, output="sos"), x, axis=0)
         t = np.arange(len(x)) / SR
         tw = t + 0.0007 * np.sin(2 * np.pi * 0.45 * t)                  # wow rat nhe
-        return np.stack([np.interp(tw, t, x[:, c]) for c in range(2)], axis=1).astype(np.float32)
-    return x
+        x = np.stack([np.interp(tw, t, x[:, c]) for c in range(2)], axis=1).astype(np.float32)
+    lo = getattr(opts, "lofi", None) or ("on" if fx == "lofi" else "off")
+    wet, decay = REVERB.get(fx, (0.0, 1.8))
+    if getattr(opts, "reverb", None) is not None:
+        wet = float(opts.reverb)
+        decay = 2.8 if wet >= 0.25 else 1.8
+    if lo == "on":  # lo-fi sach: am hon, wow ~4 cent; khong re vinyl, hiss hay meo tieng (nghe nhu loa re)
+        x = sosfilt(butter(2, 70, "highpass", fs=SR, output="sos"), x, axis=0)
+        x = sosfilt(butter(1, 6500, "lowpass", fs=SR, output="sos"), x, axis=0)
+        t = np.arange(len(x)) / SR
+        tw = t + 0.0009 * np.sin(2 * np.pi * 0.45 * t)
+        x = np.stack([np.interp(tw, t, x[:, c]) for c in range(2)], axis=1).astype(np.float32)
+    if wet > 0:
+        x = reverb(x.astype(np.float32), wet=wet, decay=decay)
+    return np.asarray(x, dtype=np.float32)
 
 
 # ----------------------------------------------------------------------------- build
@@ -841,6 +854,13 @@ def build_sequence(order: list[str], an: dict, work: Path, opts):
                  if c is not None]
         log("      diem chuyen bai (thap = tot): " + ", ".join(f"{t} {c:.1f}" for c, t, _ in sorted(cands)))
         tr = min(cands, key=lambda c: c[0])[2]
+        want = getattr(opts, "transition_type", "auto")
+        if want != "auto":
+            pick = [c[2] for c in cands if c[1] == want]
+            if pick:
+                tr = pick[0]
+            else:
+                log(f"      {want}: khong lam duoc o day (nhip lech qua xa), dung {tr['type']}")
         if tr["type"] == "beat":
             d_, m = d_b, m_b
         else:
@@ -862,7 +882,7 @@ def build_sequence(order: list[str], an: dict, work: Path, opts):
     return seq, plans
 
 
-def mix_base(seq: list[dict], plans: list[dict], stem_style: str) -> np.ndarray:
+def mix_base(seq: list[dict], plans: list[dict], stem_style: str, opts=None) -> np.ndarray:
     ends = []
     for tr, pl in zip(seq, plans):
         end = tr["m"]["end_audio"] if pl["trans_out"] is None else (
@@ -873,7 +893,7 @@ def mix_base(seq: list[dict], plans: list[dict], stem_style: str) -> np.ndarray:
     for i, (tr, pl) in enumerate(zip(seq, plans)):
         st = load_stems(tr["dir"])
         st = {k: v * tr["gain"] for k, v in st.items()}
-        st = style_stems(st, stem_style)
+        st = style_stems(st, stem_style, opts)
         m, tin, tout = tr["m"], pl["trans"], pl["trans_out"]
         t0 = tin["b_entry"]
         t1 = m["end_audio"] if tout is None else (
@@ -905,8 +925,8 @@ def mix_base(seq: list[dict], plans: list[dict], stem_style: str) -> np.ndarray:
     return buf[: nz[-1] + int(0.5 * SR)] if len(nz) else buf
 
 
-def master(x: np.ndarray, out_base: Path, work: Path) -> dict:
-    g = db2lin(TARGET_LUFS - loudness(x))
+def master(x: np.ndarray, out_base: Path, work: Path, target: float = TARGET_LUFS) -> dict:
+    g = db2lin(target - loudness(x))
     tmp = work / "tmp_master.wav"
     write_wav(tmp, x * g)
     wav, mp3 = out_base.with_suffix(".wav"), out_base.with_suffix(".mp3")
@@ -926,6 +946,36 @@ def master(x: np.ndarray, out_base: Path, work: Path) -> dict:
     P = re.search(r"Peak:\s+(-?[\d.]+) dBFS", summ)
     return {"wav": str(wav), "mp3": str(mp3), "lufs": float(I.group(1)) if I else None,
             "true_peak_dbfs": float(P.group(1)) if P else None}
+
+
+def render_demo(order: list[str], an: dict, work: Path, out: Path, style: str, opts) -> None:
+    """A short preview of one transition (song k -> k+1 in the playlist order) with the chosen style and
+    DJ settings. Only these two songs are separated, so it is quick once the songs are analysed."""
+    k = min(max(1, opts.demo), len(order) - 1)
+    pair = order[k - 1:k + 1]
+    log(f"3) Tach stem (demo: chuyen bai {k} -> {k + 1})")
+    separate(pair, work, opts.device)
+    add_residual(work, pair)
+    log("4) Khop nhip / tong")
+    seq, plans = build_sequence(pair, an, work, opts)
+    log("5) Render demo")
+    stem_style, fx = STYLES[style]
+    base = mix_base(seq, plans, stem_style, opts)
+    c = plans[1]["chapter"]
+    a, b = max(0, int((c - opts.demo_before) * SR)), min(len(base), int((c + opts.demo_after) * SR))
+    x = apply_fx(base[a:b], fx, opts)
+    f = min(len(x) // 4, int(1.5 * SR))
+    ramp = np.linspace(0, 1, f, dtype=np.float32)[:, None]
+    x[:f] *= ramp
+    x[len(x) - f:] *= ramp[::-1]
+    res = master(x, out / "_demo", work, opts.lufs)
+    sp = fx_speed(fx, opts)
+    info = {"style": style, "transition": k, "of": len(order) - 1, "from": seq[0]["name"], "to": seq[1]["name"],
+            "type": plans[1]["trans"]["type"], "at": round((c - a / SR) / sp, 2), "length": round(len(x) / SR, 2),
+            "mp3": "_demo.mp3", "lufs": res["lufs"], "made": time.strftime("%Y-%m-%d %H:%M:%S")}
+    (out / "_demo.json").write_text(json.dumps(info, ensure_ascii=False, indent=2), "utf-8")
+    (out / "_demo.wav").unlink(missing_ok=True)
+    log(f"Demo xong: {seq[0]['name']} -> {seq[1]['name']} ({info['type']}), {fmt_time(len(x) / SR)}")
 
 
 def lower_priority() -> None:
@@ -960,7 +1010,28 @@ def main() -> None:
     ap.add_argument("--out", help="thu muc ket qua (mac dinh <ROOT>/output/<slug>)")
     ap.add_argument("--slug", help="ten file ket qua (mac dinh theo ten thu muc)")
     ap.add_argument("--normal-priority", action="store_true", help="khong ha muc uu tien CPU")
+    # DJ settings: left unset, each style keeps its own sound
+    ap.add_argument("--order", choices=("smart", "keep", "files"), help="smart: theo nhip/tong; keep: plan.json; files: A-Z")
+    ap.add_argument("--transition-type", choices=TRANSITION_TYPES, default="auto", help="kieu chuyen bai uu tien")
+    ap.add_argument("--speed", type=float, help="toc do ca ban mix (doi ca cao do), vd 0.85 slowed, 1.2 nightcore")
+    ap.add_argument("--reverb", type=float, help="reverb 0-0.6")
+    ap.add_argument("--lofi", choices=("on", "off"), help="loc lo-fi: am hon, wow nhe")
+    ap.add_argument("--duck", type=float, help="kick nen nhac/giong (pump) 0-0.6")
+    for s in STEMS:
+        ap.add_argument(f"--gain-{s}", type=float, default=0.0, help=f"muc {s} (dB)")
+    ap.add_argument("--lufs", type=float, default=TARGET_LUFS, help="do to ban mix (LUFS)")
+    ap.add_argument("--demo", type=int, default=0, help="chi render demo chuyen bai thu N -> N+1 (_demo.mp3)")
+    ap.add_argument("--demo-before", type=float, default=22.0, help="demo: so giay truoc diem chuyen")
+    ap.add_argument("--demo-after", type=float, default=26.0, help="demo: so giay sau diem chuyen")
     opts = ap.parse_args()
+    if opts.order:
+        opts.reorder = opts.order == "smart"
+    opts.speed = min(1.5, max(0.6, opts.speed)) if opts.speed else None
+    opts.reverb = min(0.6, max(0.0, opts.reverb)) if opts.reverb is not None else None
+    opts.duck = min(0.6, max(0.0, opts.duck)) if opts.duck is not None else None
+    opts.lufs = min(-8.0, max(-24.0, opts.lufs))
+    for s in STEMS:
+        setattr(opts, f"gain_{s}", min(12.0, max(-24.0, getattr(opts, f"gain_{s}"))))
 
     pdir = Path(opts.playlist)
     pdir = pdir if pdir.is_absolute() else (ROOT / pdir)
@@ -987,6 +1058,8 @@ def main() -> None:
     an = analyze(files, work)
     order = load_plan(an, work, opts)
     log("2) Thu tu: " + "  ->  ".join(an[t]["name"] for t in order))
+    if opts.demo:
+        return render_demo(order, an, work, out, styles[0], opts)
     log("3) Tach stem")
     separate(order, work, opts.device)
     add_residual(work, order)
@@ -1010,10 +1083,10 @@ def main() -> None:
     for style in styles:
         stem_style, fx = STYLES[style]
         if stem_style not in bases:
-            bases[stem_style] = mix_base(seq, plans, stem_style)
-        x = apply_fx(bases[stem_style], fx)
-        res = master(x, out / f"{slug}_{style}", work)
-        sp = SPEED[fx]
+            bases[stem_style] = mix_base(seq, plans, stem_style, opts)
+        x = apply_fx(bases[stem_style], fx, opts)
+        res = master(x, out / f"{slug}_{style}", work, opts.lufs)
+        sp = fx_speed(fx, opts)
         lines = [f"{fmt_time(pl['chapter'] / sp)} {tr['name']}" for tr, pl in zip(seq, plans)]
         (out / f"tracklist_{style}.txt").write_text("\n".join(lines) + "\n", "utf-8")
         res["duration"] = fmt_time(len(x) / SR)

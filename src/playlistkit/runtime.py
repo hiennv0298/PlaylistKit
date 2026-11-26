@@ -245,6 +245,20 @@ def engine_cmd(python: Path, songs: Path, work: Path, out: Path, slug: str, styl
         cmd += ["--transition", str(opts["transition"])]
     if not opts.get("low_priority", True):
         cmd.append("--normal-priority")
+    # DJ settings (see DJ_KEYS in gui.py); a missing one keeps the style's own sound
+    if opts.get("order") in ("smart", "keep", "files"):
+        cmd += ["--order", opts["order"]]
+    if opts.get("transition_type") in ("beat", "fade", "echo"):
+        cmd += ["--transition-type", opts["transition_type"]]
+    for key, flag in (("speed", "--speed"), ("reverb", "--reverb"), ("duck", "--duck"), ("lufs", "--lufs"),
+                      ("gain_drums", "--gain-drums"), ("gain_bass", "--gain-bass"),
+                      ("gain_other", "--gain-other"), ("gain_vocals", "--gain-vocals")):
+        if opts.get(key) is not None:
+            cmd += [flag, str(float(opts[key]))]
+    if opts.get("lofi") is not None:
+        cmd += ["--lofi", "on" if opts["lofi"] else "off"]
+    if opts.get("demo"):
+        cmd += ["--demo", str(int(opts["demo"]))]
     return cmd
 
 

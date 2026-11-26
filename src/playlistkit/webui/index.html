@@ -88,6 +88,12 @@
   .tablewrap thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
   .ell { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .flag { font-size: 12px; } .flag.bad { color: var(--bad); } .flag.warn { color: var(--warn); }
+  .djgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 4px 0 12px; }
+  .djgrid section { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
+  .djgrid h3 { margin: 0; font-size: 14px; }
+  .djgrid .field > span b { color: var(--text); font-weight: 600; margin-left: 4px; }
+  .djgrid input[type=range] { width: 100%; accent-color: var(--accent); }
+  @media (max-width: 1000px) { .djgrid { grid-template-columns: 1fr; } }
   .thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: 10px; background: #0a080c; border: 1px solid var(--border); }
   .copyrow { display: flex; gap: 8px; align-items: flex-start; }
   .copyrow .input { flex: 1; }
@@ -214,15 +220,47 @@
 
     <div id="t-remix" class="tabpane" hidden>
       <div class="card pad">
-        <h2>Remix</h2>
-        <div class="row">
+        <div class="row"><h2 style="margin:0">Remix</h2><div class="spacer"></div>
+          <button class="btn small ghost" onclick="djReset()" title="Put every setting back to what this style does by itself">↺ Reset to the style's sound</button></div>
+        <div class="row" style="margin-top:12px;align-items:flex-end">
+          <label class="field"><span>DJ preset</span><select class="input" id="djPreset" style="min-width:230px"></select></label>
           <label class="field"><span>Style</span><select class="input" id="rStyle"></select></label>
-          <label class="chk" style="margin-top:18px"><input type="checkbox" id="rKey"> allow key changes</label>
-          <label class="field"><span>Max tempo change</span><select class="input" id="rStretch"><option value="0.04">4%</option><option value="0.08">8%</option><option value="0.12">12%</option></select></label>
-          <label class="field"><span>Transition (s)</span><input class="input" id="rTrans" type="number" value="14" min="4" max="40" style="width:80px"></label>
-          <button class="btn primary big" style="margin-top:18px" data-job onclick="remix()">Remix</button>
+          <button class="btn primary big" data-job onclick="remix()">Remix</button>
+          <div class="spacer"></div>
+          <label class="field"><span>Listen to transition</span><select class="input" id="dTrans"></select></label>
+          <button class="btn big" data-job onclick="demo()" title="Renders about 45 seconds around one transition with these settings">▶ Demo</button>
         </div>
         <p class="faint small" id="styleHelp"></p>
+        <div class="note" id="demoBox" hidden style="margin-bottom:12px">
+          <div class="row"><b>Demo</b><span class="muted small" id="demoInfo"></span></div>
+          <audio id="demoPlayer" controls preload="none" style="margin-top:8px"></audio></div>
+        <div class="djgrid">
+          <section><h3>Mixing</h3>
+            <label class="field"><span>Song order</span><select class="input sm" id="djOrder">
+              <option value="smart">Smart: by tempo and key</option><option value="files">As the songs are named (A → Z)</option>
+              <option value="keep">Keep the last mix's order</option></select></label>
+            <label class="field"><span>Transition</span><select class="input sm" id="djType">
+              <option value="auto">Auto: the best one for each pair</option><option value="beat">Beat mix (beat-matched, stem swap)</option>
+              <option value="fade">Vocal fade (next song after the last line)</option><option value="echo">Echo out (cut on the beat + echo)</option></select></label>
+            <label class="field"><span>Transition length <b id="vTrans"></b></span><input type="range" id="rTrans" min="4" max="32" step="1"></label>
+            <label class="field"><span>Max tempo change <b id="vStretch"></b></span><input type="range" id="rStretch" min="0" max="0.16" step="0.02"></label>
+            <label class="chk small"><input type="checkbox" id="rKey"> allow key changes (±1 semitone to match keys)</label>
+          </section>
+          <section><h3>Sound</h3>
+            <label class="field"><span>Speed <b id="vSpeed"></b></span><input type="range" id="djSpeed" min="0.7" max="1.3" step="0.01"></label>
+            <label class="field"><span>Reverb <b id="vReverb"></b></span><input type="range" id="djReverb" min="0" max="0.6" step="0.02"></label>
+            <label class="field"><span>Kick pump (sidechain) <b id="vDuck"></b></span><input type="range" id="djDuck" min="0" max="0.6" step="0.05"></label>
+            <label class="chk small"><input type="checkbox" id="djLofi"> lo-fi warmth (softer highs, light tape wobble)</label>
+            <label class="field"><span>Loudness</span><select class="input sm" id="djLufs">
+              <option value="-18">-18 LUFS (very quiet, for sleep)</option><option value="-16">-16 LUFS (quiet, more dynamic)</option><option value="-14">-14 LUFS (YouTube)</option><option value="-12">-12 LUFS (loud)</option><option value="-10">-10 LUFS (club loud)</option></select></label>
+          </section>
+          <section><h3>Levels <span class="faint small">(stems)</span></h3>
+            <label class="field"><span>Drums <b id="vDrums"></b></span><input type="range" id="djDrums" min="-12" max="6" step="1"></label>
+            <label class="field"><span>Bass <b id="vBass"></b></span><input type="range" id="djBass" min="-12" max="6" step="1"></label>
+            <label class="field"><span>Music (guitar, keys, synths) <b id="vOther"></b></span><input type="range" id="djOther" min="-12" max="6" step="1"></label>
+            <label class="field"><span>Vocals <b id="vVocals"></b></span><input type="range" id="djVocals" min="-12" max="6" step="1"></label>
+          </section>
+        </div>
         <div class="note small" id="aiNote" style="margin-top:8px">…</div>
       </div>
       <div class="card pad" style="margin-top:16px" id="mixBox" hidden>
@@ -248,7 +286,9 @@
         <div class="card pad">
           <h2>Video</h2>
           <img class="thumb" id="thumbImg" alt="" hidden>
-          <div class="row" style="margin-top:10px"><button class="btn" onclick="pickThumb()">Choose thumbnail…</button><span class="muted small" id="thumbName"></span></div>
+          <div class="row" style="margin-top:10px"><button class="btn primary" onclick="openThumb()">✨ Make thumbnail</button>
+            <button class="btn" onclick="pickThumb()">Choose your own…</button><span class="muted small" id="thumbName"></span></div>
+          <p class="faint small" id="thumbAuto" hidden>Made by PlaylistKit from the playlist name and length. It follows them until you edit it in Make thumbnail.</p>
           <div class="row" style="margin-top:12px" id="vRes"></div>
           <div class="row" style="margin-top:12px"><button class="btn primary big" data-job onclick="makeVideo()">Make MP4</button></div>
           <p class="faint small">Still image + the mix, 2 fps H.264 + AAC 384k, made for YouTube. Non-16:9 images sit on a blurred copy of themselves.</p>
@@ -350,7 +390,10 @@ async function init() {
   renderGenrePick(); renderRes('qRes', 'q'); renderRes('vRes', 'v');
   $('pGenre').innerHTML = G.groups.map(gr => `<optgroup label="${esc(gr)}">` + G.genres.filter(g => g.group === gr).map(g => `<option value="${g.id}">${g.emoji} ${esc(g.name)}</option>`).join('') + '</optgroup>').join('');
   $('rStyle').innerHTML = G.styles.map(s => `<option>${s}</option>`).join('');
-  $('rStyle').onchange = () => $('styleHelp').textContent = STYLE_HELP[$('rStyle').value] || '';
+  $('rStyle').onchange = djStyle;
+  ['rTrans', 'rStretch', 'djSpeed', 'djReverb', 'djDuck', 'djDrums', 'djBass', 'djOther', 'djVocals'].forEach(id => $(id).addEventListener('input', djShow));
+  ['djOrder', 'djType', 'rKey', 'djLofi', 'djLufs'].forEach(id => $(id).addEventListener('change', djShow));
+  $('djPreset').onchange = djPresetPick;
   $('srcList').innerHTML = Object.entries(G.sources).map(([k, v]) => `<label class="chk"><input type="checkbox" class="src" value="${k}"> ${esc(v)}</label>`).join('');
   const route = location.hash.slice(1); if (route) openProject(route); else goHome();
   poll();
@@ -403,8 +446,7 @@ async function openProject(id) {
   document.querySelectorAll('.src').forEach(c => c.checked = srcs.includes(c.value));
   $('fCount').value = S.count || 30; $('fUsedArtists').checked = !!S.allow_used_artists;
   const g = G.genres.find(g => g.id === P.genre);
-  $('rStyle').value = P.style; $('styleHelp').textContent = STYLE_HELP[P.style] || '';
-  $('rKey').checked = !['indie', 'lofi'].includes(P.style); $('rStretch').value = ['indie', 'lofi'].includes(P.style) ? '0.04' : '0.08';
+  djFillOnce(); djShow(); renderDemo();
   renderCands(); renderSongs(); renderMix(); renderMeta(); tab(CUR_TAB);
   loadAi();
 }
@@ -477,7 +519,86 @@ function renderSongs() {
 function playSong(f) { const a = $('songPlayer'); a.hidden = false; a.src = `/files/${P.id}/song/${f}`; a.play(); }
 async function removeSong(f, sel) { const reason = sel.value; if (!reason) return;
   await api('/api/song/remove', {id: P.id, file: decodeURIComponent(f), reason}); refresh(); }
-function remix() { return startJob('/api/remix', {id: P.id, style: $('rStyle').value, keyshift: $('rKey').checked, max_stretch: +$('rStretch').value, transition: +$('rTrans').value, reorder: true}); }
+// ---------------------------------------------------------------- DJ settings
+// What each style does by itself; the sliders start there and the engine only changes what you move.
+const STYLE_FX = {dj: {speed: 1, reverb: 0, lofi: false, duck: 0}, club: {speed: 1, reverb: 0, lofi: false, duck: 0.3},
+  lofi: {speed: 0.92, reverb: 0.14, lofi: true, duck: 0}, slowed: {speed: 0.85, reverb: 0.32, lofi: false, duck: 0},
+  nightcore: {speed: 1.2, reverb: 0, lofi: false, duck: 0.3}, indie: {speed: 0.96, reverb: 0, lofi: false, duck: 0}};
+const SOFT_STYLES = ['indie', 'lofi'];
+function djDefaults(style) { const soft = SOFT_STYLES.includes(style);
+  return {order: 'smart', transition_type: 'auto', transition: 14, max_stretch: soft ? 0.04 : 0.08, keyshift: !soft,
+    ...(STYLE_FX[style] || STYLE_FX.dj), lufs: -14, gain_drums: 0, gain_bass: 0, gain_other: 0, gain_vocals: 0}; }
+function djFill(d) {
+  $('djOrder').value = d.order || 'smart'; $('djType').value = d.transition_type || 'auto'; $('rTrans').value = d.transition;
+  $('rStretch').value = d.max_stretch; $('rKey').checked = !!d.keyshift; $('djSpeed').value = d.speed; $('djReverb').value = d.reverb;
+  $('djDuck').value = d.duck; $('djLofi').checked = !!d.lofi; $('djLufs').value = String(Math.round(d.lufs));
+  $('djDrums').value = d.gain_drums; $('djBass').value = d.gain_bass; $('djOther').value = d.gain_other; $('djVocals').value = d.gain_vocals;
+  djShow();
+}
+function djRead() {
+  return {order: $('djOrder').value, transition_type: $('djType').value, transition: +$('rTrans').value, max_stretch: +$('rStretch').value,
+    keyshift: $('rKey').checked, speed: +$('djSpeed').value, reverb: +$('djReverb').value, duck: +$('djDuck').value, lofi: $('djLofi').checked,
+    lufs: +$('djLufs').value, gain_drums: +$('djDrums').value, gain_bass: +$('djBass').value, gain_other: +$('djOther').value, gain_vocals: +$('djVocals').value};
+}
+function djShow() {
+  const db = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + ' dB', pct = v => Math.round(v * 100) + '%', sp = +$('djSpeed').value;
+  $('vTrans').textContent = $('rTrans').value + ' s'; $('vStretch').textContent = +$('rStretch').value ? '±' + pct(+$('rStretch').value) : 'off (no tempo change)';
+  $('vSpeed').textContent = `×${sp.toFixed(2)}` + (sp < 0.995 ? ' · slower, lower pitch' : sp > 1.005 ? ' · faster, higher pitch' : ' · original');
+  $('vReverb').textContent = +$('djReverb').value ? pct(+$('djReverb').value) : 'off'; $('vDuck').textContent = +$('djDuck').value ? pct(+$('djDuck').value) : 'off';
+  [['vDrums', 'djDrums'], ['vBass', 'djBass'], ['vOther', 'djOther'], ['vVocals', 'djVocals']].forEach(([v, i]) => $(v).textContent = db(+$(i).value));
+  const n = Math.max(1, (P && P.songs || 2) - 1), cur = +$('dTrans').value || 1;
+  if ($('dTrans').options.length !== n) $('dTrans').innerHTML = Array.from({length: n}, (_, i) => `<option value="${i + 1}">${i + 1} → ${i + 2}</option>`).join('');
+  $('dTrans').value = String(Math.min(cur, n));
+  if (P) djPresetShow();
+}
+function djStyle() {  // a new style brings its own speed, reverb, lo-fi and pump; the mixing choices stay
+  const s = $('rStyle').value, d = djDefaults(s);
+  djFill({...djRead(), speed: d.speed, reverb: d.reverb, lofi: d.lofi, duck: d.duck, keyshift: d.keyshift, max_stretch: d.max_stretch});
+}
+function djReset() { djFill(djDefaults($('rStyle').value)); }
+
+// DJ presets (presets.py): a style + every setting. The menu shows "Custom" as soon as you move something.
+const presetById = id => (G.presets || []).find(p => p.id === id);
+function presetOptions() {
+  const all = G.presets || [], mine = all.filter(p => p.genres.includes(P.genre)), g = (G.genres.find(x => x.id === P.genre) || {}).name || P.genre;
+  const opt = p => `<option value="${p.id}">${esc(p.name)} (${p.style})</option>`;
+  $('djPreset').innerHTML = `<option value="custom">Custom</option>` +
+    (mine.length ? `<optgroup label="For ${esc(g)}">${mine.map(opt).join('')}</optgroup>` : '') +
+    `<optgroup label="${mine.length ? 'Other presets' : 'Presets'}">${all.filter(p => !mine.includes(p)).map(opt).join('')}</optgroup>`;
+}
+function presetMatch() {  // which preset the style and sliders are exactly on, if any
+  const cur = djRead(), style = $('rStyle').value;
+  const same = p => p.style === style && Object.entries(p.dj).every(([k, v]) => typeof v === 'number' ? Math.abs(cur[k] - v) < 1e-6 : cur[k] === v);
+  const want = presetById($('djPreset').dataset.picked);
+  return (want && same(want)) ? want : (G.presets || []).find(same);
+}
+function djPresetShow() {
+  const p = presetMatch(); $('djPreset').value = p ? p.id : 'custom';
+  const s = $('rStyle').value;
+  $('styleHelp').textContent = p ? `${p.name}: ${p.about}` : (STYLE_HELP[s] || '') + (presetById($('djPreset').dataset.picked) ? ' · changed from a preset' : '');
+}
+function djPresetPick() {
+  const p = presetById($('djPreset').value); if (!p) return djPresetShow();
+  $('djPreset').dataset.picked = p.id; $('rStyle').value = p.style; djFill({...djDefaults(p.style), ...p.dj});
+}
+function djRemember(d) { return {...d, preset: (presetMatch() || {}).id || 'custom'}; }
+function remix() { return startJob('/api/remix', {id: P.id, style: $('rStyle').value, ...djRemember(djRead())}); }
+let DEMO_WAIT = null, DJ_FILLED = '';  // DEMO_WAIT: the demo we replace, so the new one plays by itself
+function demo() { DEMO_WAIT = (P.demo || {}).made || '-';
+  return startJob('/api/remix', {id: P.id, style: $('rStyle').value, ...djRemember(djRead()), demo: +$('dTrans').value || 1}); }
+function djFillOnce() {  // refreshes keep what you are moving; a new project or a new mix loads its saved settings
+  const key = P.id + JSON.stringify(P.dj || {}); if (key === DJ_FILLED) return; DJ_FILLED = key;
+  presetOptions(); $('djPreset').dataset.picked = (P.dj || {}).preset || '';
+  $('rStyle').value = P.style; djFill({...djDefaults(P.style), ...(P.dj || {})});
+}
+function renderDemo() {
+  const d = P.demo || {}; $('demoBox').hidden = !d.mp3; if (!d.mp3) return;
+  const kind = {beat: 'beat mix', fade: 'vocal fade', echo: 'echo out'}[d.type] || d.type;
+  $('demoInfo').textContent = `transition ${d.transition} → ${d.transition + 1}: ${d.from} → ${d.to} · ${kind} at ${fmt(d.at)} · style ${d.style}`;
+  const url = `/files/${P.id}/out/_demo.mp3?t=${encodeURIComponent(d.made)}`, pl = $('demoPlayer');
+  if (pl.dataset.src !== url) { pl.dataset.src = url; pl.src = url; }
+  if (DEMO_WAIT !== null && DEMO_WAIT !== d.made) { DEMO_WAIT = null; pl.play().catch(() => {}); }
+}
 function renderMix() {
   $('mixBox').hidden = !P.mix.mp3 && !P.mix.wav; if ($('mixBox').hidden) return;
   $('mixPlayer').src = `/files/${P.id}/out/${encodeURIComponent(P.mix.mp3 || P.mix.wav)}`;
@@ -490,15 +611,19 @@ function renderMeta() {
   $('trkEdit').innerHTML = (P.tracks || []).map((x, i) => `<div class="trk"><input class="input sm" value="${esc(x.ts)}" data-i="${i}" data-k="ts"><input class="input sm" value="${esc(x.name)}" data-i="${i}" data-k="name"></div>`).join('') || '<p class="faint small">Render the mix first.</p>';
   $('thumbImg').hidden = !P.thumb; if (P.thumb) $('thumbImg').src = `/files/${P.id}/thumb/${encodeURIComponent(P.thumb.split(/[\\/]/).pop())}?t=${Date.now()}`;
   $('thumbName').textContent = P.thumb ? P.thumb.split(/[\\/]/).pop() : 'no thumbnail yet';
+  $('thumbAuto').hidden = !(P.thumb && P.thumb_auto);
+  if (window.thumbCheck) thumbCheck();
   $('outFiles').innerHTML = (P.outputs || []).map(f => `<div class="row" style="gap:6px"><a href="#" onclick="api('/api/open',{id:P.id,area:'out',file:'${esc(f)}'});return false">${esc(f)}</a></div>`).join('') || '<span class="faint">nothing yet</span>';
 }
 async function saveMeta(withTracks) {
   const body = {id: P.id, name: $('mName').value};
   if (withTracks) { const rows = {}; document.querySelectorAll('#trkEdit input').forEach(el => { (rows[el.dataset.i] ||= {})[el.dataset.k] = el.value; }); body.tracks = Object.values(rows); }
-  const r = await api('/api/meta', body); P.meta_text = r.text; P.title_name = r.name; P.tracks = r.tracks; renderMeta();
+  const r = await api('/api/meta', body); P.meta_text = r.text; P.title_name = r.name; P.tracks = r.tracks;
+  if ((r.title || '').includes(' | ')) P.length_text = r.title.split(' | ').pop();
+  renderMeta();
 }
 async function pickThumb() { const r = await api('/api/pick', {kind: 'image'}); if (!r.path) return; await api('/api/thumb', {id: P.id, path: r.path}); refresh(); }
-function makeVideo() { return startJob('/api/video', {id: P.id, resolutions: resOf('v')}); }
+async function makeVideo() { if (!P.thumb && window.thumbCheck) await thumbCheck(true); return startJob('/api/video', {id: P.id, resolutions: resOf('v')}); }
 async function cidPreview() {
   const r = await api('/api/cut/preview', {id: P.id, text: $('cidText').value});
   $('cidOut').innerHTML = `<h3>${r.claimed.length} songs will be removed</h3>` + r.claimed.map(c => `<div>• <span class="muted">${c.ts}</span> ${esc(c.name)}</div>`).join('') +
@@ -664,10 +789,11 @@ async function installUpdate() {
 }
 window.addEventListener('pagehide', () => navigator.sendBeacon('/api/bye', '{}'));
 busyWhile('startJob', 'createProject', 'createFromFolder', 'pickQuick', 'quickVideo', 'openProject', 'findSongs', 'downloadSel',
-  'remix', 'makeVideo', 'saveMeta', 'pickThumb', 'cidPreview', 'cidApply', 'deleteProject', 'installAi', 'useAi', 'checkAi',
+  'remix', 'demo', 'makeVideo', 'saveMeta', 'pickThumb', 'cidPreview', 'cidApply', 'deleteProject', 'installAi', 'useAi', 'checkAi',
   'pickInto', 'saveSettings', 'openSettings', 'checkUpdates', 'checkUpdatesHere', 'installUpdate', 'updateProject');
 init();
 </script>
 <script src="/editor.js"></script>
+<script src="/thumb.js"></script>
 </body>
 </html>

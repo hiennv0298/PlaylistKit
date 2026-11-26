@@ -234,7 +234,32 @@ def job_screen(pid: str) -> dict:
     return {"checked": len(res)}
 
 
-def job_remix(pid: str, style: str, opts: dict) -> dict:
+DJ_KEYS = {  # DJ settings on the Remix tab -> (type, low, high); anything else in the request is ignored
+    "keyshift": (bool, None, None), "reorder": (bool, None, None), "max_stretch": (float, 0.0, 0.16),
+    "transition": (float, 4.0, 40.0), "order": (str, ("smart", "keep", "files"), None),
+    "transition_type": (str, ("auto", "beat", "fade", "echo"), None), "speed": (float, 0.7, 1.3),
+    "reverb": (float, 0.0, 0.6), "lofi": (bool, None, None), "duck": (float, 0.0, 0.6), "lufs": (float, -20.0, -9.0),
+    "gain_drums": (float, -12.0, 6.0), "gain_bass": (float, -12.0, 6.0), "gain_other": (float, -12.0, 6.0),
+    "gain_vocals": (float, -12.0, 6.0), "preset": (str, None, None)}
+
+
+def dj_opts(body: dict) -> dict:
+    out = {}
+    for key, (kind, lo, hi) in DJ_KEYS.items():
+        if body.get(key) is None:
+            continue
+        v = body[key]
+        if kind is bool:
+            out[key] = bool(v)
+        elif kind is str:
+            if (v in lo) if lo else re.fullmatch(r"[a-z0-9-]{1,40}", str(v)):  # lo None: a short id (preset)
+                out[key] = v
+        else:
+            out[key] = round(min(hi, max(lo, float(v))), 4)
+    return out
+
+
+def job_remix(pid: str, style: str, opts: dict, demo: int = 0) -> dict:
     from playlistkit import meta, runtime
 
     p = get_project(pid)
@@ -255,10 +280,16 @@ def job_remix(pid: str, style: str, opts: dict) -> dict:
                                "Open Settings and press Install AI, or set an existing AI Python.")
     py = Path(st["python"])
     p.data["style"] = style
+    p.data["dj"] = opts
     p.save()
     g = GENRES[p.genre]
-    eng = {**g.engine, **opts, "device": s["device"] if st.get("cuda") else "cpu", "low_priority": s["low_priority"]}
-    log(f"Remixing {len(files)} songs, style {style}, device {eng['device']}")
+    eng = {**g.engine, **opts, "device": s["device"] if st.get("cuda") else "cpu", "low_priority": s["low_priority"],
+           "demo": demo}
+    if demo:
+        (p.out / "_demo.json").unlink(missing_ok=True)
+        log(f"Demo of transition {demo}, style {style}, device {eng['device']}")
+    else:
+        log(f"Remixing {len(files)} songs, style {style}, device {eng['device']}")
     cur = {"base": 0.0, "width": 0.0, "n": 0, "sep_total": 0, "sep_done": 0}
 
     def on_line(line: str) -> None:
@@ -282,6 +313,11 @@ def job_remix(pid: str, style: str, opts: dict) -> dict:
             STATE.set((cur["base"] + cur["width"] * i / n) / 100, f"Matching tempo and key {i}/{n}")
 
     runtime.run_engine(py, p.songs, p.work, p.out, p.id, style, eng, on_line)
+    if demo:
+        info = read_json(p.out / "_demo.json", {})
+        if not info:
+            raise PlaylistKitError("The demo was not made. Open the log to see why.")
+        return info
     info = meta.make_for_project(p)
     # the songs of this mix are now used
     from playlistkit.download import song_info
@@ -375,6 +411,11 @@ def project_detail(pid: str) -> dict:
     return {**p.summary(), "candidates": read_json(p.file("candidates.json"), []), "song_list": songs,
             "meta_text": meta_path.read_text(encoding="utf-8") if meta_path.is_file() else "",
             "tracks": tracks, "outputs": outputs, "thumb": p.data.get("thumb", ""),
+            "dj": p.data.get("dj") or {},
+            "demo": read_json(p.out / "_demo.json", {}) if (p.out / "_demo.mp3").is_file() else {},
+            "thumb_auto": bool(p.data.get("thumb_auto")), "thumb_design": p.data.get("thumb_design") or {},
+            "length_text": (p.data.get("title") or "").rpartition(" | ")[2] if " | " in (p.data.get("title") or "") else "",
+            "tagline": g.tagline if g else "",
             "title_name": p.data.get("title_name", ""), "risk_text": genres.RISK_TEXT[g.risk] if g else "",
             "mix": {k: v.name for k, v in mix.items()}}
 
@@ -526,8 +567,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             if path in ("/icon-32.png", "/icon-192.png", "/icon-512.png", "/favicon.ico"):
                 return self._serve_file(WEBUI / ("playlistkit.ico" if path == "/favicon.ico" else path[1:]))
-            if path == "/editor.js":
-                return self._send(200, (WEBUI / "editor.js").read_bytes(), "text/javascript; charset=utf-8")
+            if path in ("/editor.js", "/thumb.js"):
+                return self._send(200, (WEBUI / path[1:]).read_bytes(), "text/javascript; charset=utf-8")
             if path == "/api/edit":
                 from playlistkit import editor
 
@@ -564,7 +605,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/genres":
                 from playlistkit.sources import SOURCES
 
+                from playlistkit import presets
+
                 return self._json({"genres": genres.as_list(), "groups": genres.GROUPS, "styles": list(STYLES),
+                                   "presets": presets.as_list(),
                                    "sources": SOURCES, "resolutions": ["480p", "720p", "1080p"]})
             if path == "/api/projects":
                 return self._json([p.summary() for p in projects.list_all(root())])
@@ -706,8 +750,12 @@ class Handler(BaseHTTPRequestHandler):
             style = body.get("style") or get_project(pid).style
             if style not in STYLES:
                 raise PlaylistKitError("Unknown style.")
-            opts = {k: body[k] for k in ("keyshift", "max_stretch", "reorder", "transition") if k in body}
-            start_job("remixing", "Remixing", pid, job_remix, pid, style, opts)
+            opts = dj_opts(body)
+            demo = int(body.get("demo") or 0)
+            if demo:
+                start_job("remixing", "Making a demo", pid, job_remix, pid, style, opts, max(1, demo))
+            else:
+                start_job("remixing", "Remixing", pid, job_remix, pid, style, opts)
             return {"ok": True}
         if path == "/api/meta":
             from playlistkit import meta
@@ -730,8 +778,15 @@ class Handler(BaseHTTPRequestHandler):
             dest = p.dir / f"thumb{src.suffix.lower()}"
             shutil.copy2(src, dest)
             p.data["thumb"] = str(dest)
+            p.data["thumb_auto"] = False
             p.save()
             return {"thumb": dest.name}
+        if path == "/api/thumb/save":  # a thumbnail drawn by the page (webui/thumb.js)
+            from playlistkit import thumbnail
+
+            p = get_project(pid)
+            design = body.get("design") if isinstance(body.get("design"), dict) else None
+            return {"thumb": thumbnail.save(p, str(body.get("data") or ""), design, bool(body.get("auto")))}
         if path == "/api/video":
             res = [r for r in body.get("resolutions") or [] if r in ("480p", "720p", "1080p")]
             if not res:

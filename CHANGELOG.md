@@ -3,6 +3,18 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.5
+
+- **DJ settings on the Remix tab, for every genre.**
+  - **Mixing:** song order (smart by tempo and key, A → Z, or the last mix's order), the kind of transition (auto, beat mix, vocal fade, echo out), its length, the max tempo change and key changes.
+  - **Sound:** speed (slower and lower, or faster and higher), reverb, kick pump (sidechain), lo-fi warmth and loudness (−18 to −10 LUFS).
+  - **Levels:** drums, bass, music and vocals, −12 to +6 dB.
+  - The sliders start where the style is, so leaving them alone sounds the same as before. **↺ Reset** puts them back. The settings are kept with the playlist.
+- **DJ presets:** 14 ready-made mixes that set the style and every DJ setting at once. They are Rap beat mix, Vinahouse club, EDM festival, Phonk drift, Deep house smooth, Synthwave drive, Pop radio, Rock / band, Nightcore, Slowed + reverb, Lo-fi chill, Indie night, Acoustic gentle, and Sleep & meditation. Every genre has one, and the presets for the playlist's genre come first in the menu. Moving any slider turns the menu to **Custom**.
+- **▶ Demo:** hear one transition (1 → 2, 2 → 3, …) with your settings before making the whole mix. It renders about 45 seconds around the transition and plays it on the Remix tab. Only those two songs are separated, so a demo takes under a minute once the songs have been analysed.
+- **Thumbnails made by PlaylistKit.** Once a playlist has a name, PlaylistKit makes its 1280×720 YouTube thumbnail by itself: the name, the length and the genre emoji on a background drawn for the genre (night sky, sunset, synthwave, ocean, rainy window, paper, forest, festive or bokeh). It follows the name and length while you change them. **✨ Make thumbnail** on the YouTube & video tab changes the background (or uses a picture from the playlist, darkened and blurred), the text, the font, the colour and where the text sits. **Choose your own…** still uses your own image. Make MP4 makes the thumbnail first if there is none.
+- **The sound wave in the video editor's preview shows the mix's real loudness** around the playhead, without the made-up movement it had. The exported video already drew the wave from the audio itself.
+
 ## 0.2.4
 
 - **Fixed: Update now did not install the new version.** The installer started while PlaylistKit was still running and could not close it, because PlaylistKit has no window of its own. A silent update then gave up and you stayed on the old version. The installer now waits for PlaylistKit to quit, closes it if it does not, and installs. Updating from 0.2.2 or 0.2.3 works with this release.

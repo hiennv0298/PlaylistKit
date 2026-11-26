@@ -437,7 +437,8 @@ function drawWave(cv, t) {
   ED.peaks[a.media].then(pk => {
     const pos = ((a.in || 0) + t - a.start) * 10, W = cv.width, H = cv.height; g.clearRect(0, 0, W, H);
     g.fillStyle = cv.dataset.color; g.globalAlpha = .85;
-    for (let x = 0; x < W; x += 3) { const i = Math.floor(pos - 20 + x * 40 / W); const v = (pk[i] || 0) * (0.6 + 0.4 * Math.abs(Math.sin(x * .7 + t * 9)));
+    // the mix's real loudness, 2 s either side of the playhead (no made-up movement)
+    for (let x = 0; x < W; x += 3) { const i = Math.floor(pos - 20 + x * 40 / W); const v = pk[i] || 0;
       const h = Math.max(1, v * H * .95); g.fillRect(x, (H - h) / 2, 2, h); }
   });
 }
