@@ -27,7 +27,8 @@ from playlistkit import __version__
 from playlistkit.util import PlaylistKitError, app_home, read_json, write_json
 
 REPO = os.environ.get("PLAYLISTKIT_REPO", "hiennv0298/PlaylistKit")
-CHECK_EVERY = 24 * 3600
+CHECK_EVERY = 3600  # a cached answer is reused for an hour (app restarts do not hit GitHub again)
+RECHECK_EVERY = 6 * 3600  # while the app stays open
 STATE_FILE = "update-check.json"
 _lock = threading.Lock()
 PROGRESS = {"phase": "idle", "progress": 0.0, "error": ""}  # idle | downloading | verifying | restarting | error
@@ -88,7 +89,9 @@ def check(force: bool = False) -> dict:
     with _lock:
         state = _load()
         now = time.time()
-        fresh = state.get("latest") and now - float(state.get("checked_at") or 0) < CHECK_EVERY
+        # an answer older than the running version came from an older install: never trust it
+        fresh = (state.get("latest") and parse_version(state["latest"]) >= parse_version(__version__)
+                 and now - float(state.get("checked_at") or 0) < CHECK_EVERY)
         if force or not fresh:
             try:
                 with _get(_release_url()) as resp:
@@ -199,5 +202,12 @@ def download_and_install(on_launched) -> None:
     on_launched()
 
 
-def start_background_check() -> None:
-    threading.Thread(target=check, daemon=True).start()
+def start_background_check(enabled=lambda: True) -> None:
+    """Check now, then again every few hours while the app is open (when enabled() still says so)."""
+    def loop() -> None:
+        while True:
+            if enabled():
+                check()
+            time.sleep(RECHECK_EVERY)
+
+    threading.Thread(target=loop, daemon=True).start()

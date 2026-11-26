@@ -3,6 +3,12 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.2
+
+- **Check for updates** button in the header and in Settings, which shows the current version, the latest one and when it last checked.
+- **New versions show up right away.** PlaylistKit checks when it opens and every few hours while it stays open. An answer saved by an older version is no longer trusted, so 0.2.0 could miss 0.2.1 for up to a day; this no longer happens.
+- **Update now closes the old version and opens the new one in the same window.** The window reloads into the new version by itself, with no leftover "PlaylistKit is not running" window and no second window.
+
 ## 0.2.1
 
 - **AI runtime check on the Remix tab and in Settings** now tells apart: installed and set, installed but not set, a broken AI Python path, and not installed.

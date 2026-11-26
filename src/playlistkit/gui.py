@@ -776,8 +776,8 @@ class Handler(BaseHTTPRequestHandler):
                 if STATE.busy:
                     STATE.status = "Stopping..."
             return {"ok": True}
-        if path == "/api/update/check":
-            updates.check(force=True)
+        if path == "/api/update/check":  # {force: false} = use the answer cached in the last hour
+            updates.check(force=body.get("force", True) is not False)
             return dict(updates.status(), enabled=load_settings()["check_updates"])
         if path == "/api/update/seen":
             updates.mark_seen()
@@ -851,9 +851,19 @@ class Handler(BaseHTTPRequestHandler):
 
 # ---------------------------------------------------------------- window and lifecycle
 
+RELAUNCH_FILE = "relaunch.json"
+
+
 def _install_update() -> None:
     def quit_soon() -> None:
+        # The new version starts on this same port, so the open window reloads into it
+        # instead of a second window opening next to a dead one.
         if SERVER:
+            try:
+                write_json(app_home() / RELAUNCH_FILE, {"port": SERVER.server_address[1], "at": time.time(),
+                                                        "from": __version__})
+            except OSError:
+                pass
             threading.Timer(2.5, SERVER.shutdown).start()
 
     try:
@@ -898,6 +908,29 @@ def _running_instance() -> str | None:
     return None
 
 
+def _take_relaunch() -> int | None:
+    """The port the old version used, when this start is the relaunch after an in-app update (10 min)."""
+    path = app_home() / RELAUNCH_FILE
+    try:
+        data = read_json(path, {})
+        path.unlink(missing_ok=True)
+        if isinstance(data, dict) and time.time() - float(data.get("at") or 0) < 600:
+            return int(data["port"])
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def _open_window_unless_reloaded(url: str, wait: float = 15) -> None:
+    """After an update the old window reloads into the new version by itself; open one only if it does not."""
+    end = time.monotonic() + wait
+    while time.monotonic() < end:
+        if STATE.seen:
+            return
+        time.sleep(0.5)
+    open_window(url)
+
+
 def _watchdog(server: ThreadingHTTPServer) -> None:
     while True:
         time.sleep(1)
@@ -926,7 +959,14 @@ def main() -> int:
         open_window(existing)
         return 0
     port = int(os.environ.get("PLAYLISTKIT_GUI_PORT") or 0)
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    relaunch = _take_relaunch()
+    server = None
+    if relaunch and not port:
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", relaunch), Handler)
+        except OSError:  # the port is taken: start normally and open a new window
+            relaunch = None
+    server = server or ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
     SERVER = server
     url = f"http://127.0.0.1:{server.server_address[1]}/"
@@ -936,10 +976,12 @@ def main() -> int:
         pass
     add_log_sink(STATE.on_log)
     threading.Thread(target=_watchdog, args=(server,), daemon=True).start()
-    if load_settings()["check_updates"]:
-        updates.start_background_check()
+    updates.start_background_check(lambda: load_settings()["check_updates"])
     if not os.environ.get("PLAYLISTKIT_GUI_NO_WINDOW"):
-        open_window(url)
+        if relaunch:
+            threading.Thread(target=_open_window_unless_reloaded, args=(url,), daemon=True).start()
+        else:
+            open_window(url)
     print(f"PlaylistKit is running at {url}  (close the app window to quit)", flush=True)
     try:
         server.serve_forever(poll_interval=0.5)

@@ -50,7 +50,7 @@ Run from source instead: `run.cmd` (creates `.venv` on first run), or `pip insta
 
 ### Updates
 
-PlaylistKit checks GitHub Releases once a day (nothing about you is sent) and shows a notice with the release notes. With the installer version, **Update now** downloads the new installer, checks it against the release's `SHA256SUMS.txt`, installs it and reopens the app; your playlists, settings and the AI runtime stay. A *What's new* window shows the notes once after each update. Click the version in the header to check right away; turn the daily check off in Settings.
+PlaylistKit checks GitHub Releases when it opens and every few hours while it stays open (nothing about you is sent) and shows a notice with the release notes. With the installer version, **Update now** downloads the new installer, checks it against the release's `SHA256SUMS.txt`, closes the old version, installs the new one and reloads the open window into it; your playlists, settings and the AI runtime stay. A *What's new* window shows the notes once after each update. Click the version in the header or **Settings → Check for updates** to check right away; turn the automatic check off in Settings.
 
 ## Copyright, honestly
 

@@ -110,6 +110,7 @@
   <div class="brand" onclick="goHome()">PlaylistKit</div>
   <button class="btn ghost small" id="verBtn" title="Check for updates" onclick="checkUpdates(true)">v…</button>
   <div class="spacer"></div>
+  <button class="btn ghost" id="updBtn" onclick="checkUpdates(true)">⟳ Check for updates</button>
   <button class="btn ghost" onclick="openSettings()">⚙ Settings</button>
 </header>
 <main>
@@ -292,7 +293,10 @@
         <div class="row"><button class="btn primary small" onclick="installAi()">Install AI (about 2.5 GB)</button>
           <label class="field" style="flex-direction:row;align-items:center;gap:8px"><span>Device</span><select class="input sm" id="sDevice"><option value="cuda">NVIDIA GPU</option><option value="cpu">CPU</option></select></label>
           <label class="chk small"><input type="checkbox" id="sLow"> low priority (lets games or video editors go first)</label></div></div>
-      <label class="chk"><input type="checkbox" id="sUpd"> Check for updates once a day</label>
+      <div class="field"><span>Updates</span>
+        <div class="row"><label class="chk"><input type="checkbox" id="sUpd"> Check for updates automatically (when the app opens and every few hours)</label>
+          <div class="spacer"></div><button class="btn small" onclick="checkUpdatesHere()">Check for updates</button></div>
+        <div class="note small" id="sUpdNote">…</div></div>
     </div>
     <div class="row" style="margin-top:18px"><div class="spacer"></div><button class="btn" onclick="$('settings').hidden=true">Cancel</button><button class="btn primary" onclick="saveSettings()">Save</button></div>
   </div>
@@ -337,6 +341,9 @@ const SAFETY = {cc: ['cc', 'Creative Commons'], artist: ['ok', 'artist upload'],
 async function init() {
   G = await api('/api/genres'); S = await api('/api/settings');
   const u = await api('/api/update'); $('verBtn').textContent = 'v' + u.current; showUpdate(u);
+  // the cached answer shows at once; then ask GitHub (cached for an hour) and look again every 30 minutes
+  if (u.enabled) api('/api/update/check', {force: false}).then(showUpdate).catch(() => {});
+  setInterval(() => { if (!GONE) api('/api/update').then(showUpdate).catch(() => {}); }, 30 * 60 * 1000);
   renderGenrePick(); renderRes('qRes', 'q'); renderRes('vRes', 'v');
   $('pGenre').innerHTML = G.groups.map(gr => `<optgroup label="${esc(gr)}">` + G.genres.filter(g => g.group === gr).map(g => `<option value="${g.id}">${g.emoji} ${esc(g.name)}</option>`).join('') + '</optgroup>').join('');
   $('rStyle').innerHTML = G.styles.map(s => `<option>${s}</option>`).join('');
@@ -506,9 +513,10 @@ function showGone() {
   if (GONE) return; GONE = true; clearTimeout(pollTimer);
   $('goneTitle').textContent = UPDATING ? 'Installing the update…' : 'PlaylistKit is not running';
   $('goneText').textContent = UPDATING
-    ? 'PlaylistKit closed itself so the new version can be installed. It reopens by itself in a few seconds. You can close this window.'
+    ? 'The old version has closed and the new one is being installed. This window reloads into the new version by itself in a few seconds.'
     : 'This window lost its connection to PlaylistKit (it was closed, updated, or quit after the window sat unused). Close this window and open PlaylistKit again from the Start menu or desktop.';
   $('gone').hidden = false;
+  if (UPDATING && UPD) waitForNewVersion(UPD.current);
 }
 async function poll(now) {
   clearTimeout(pollTimer);
@@ -539,6 +547,7 @@ async function openSettings() {
   $('sProjects').value = S.projects_dir; $('sBacklog').value = S.backlog_path; $('sBanned').value = S.banned_artists;
   $('sJamendo').value = S.jamendo_client_id; $('sAiPy').value = S.ai_python; $('sDevice').value = S.device;
   $('sLow').checked = S.low_priority; $('sUpd').checked = S.check_updates; $('settings').hidden = false; checkAi(true);
+  api('/api/update').then(updNote).catch(() => {});
 }
 async function checkAi(saved) {
   $('sAi').textContent = 'Checking…';
@@ -562,9 +571,25 @@ function installAi() { if (!confirm('Download and install PyTorch + Demucs (abou
   $('settings').hidden = true; startJob('/api/ai/install', {}); }
 
 // ---------------------------------------------------------------- updates
+let WN_SHOWN = false;
+// After "Update now" the old app quits and the new version starts on the same port:
+// wait for it, then reload this window into the new version.
+async function waitForNewVersion(from, since = Date.now()) {
+  try {
+    const r = await fetch('/api/ping', {cache: 'no-store'});
+    const v = (await r.json()).version;
+    if (v && v !== from) { location.reload(); return; }
+  } catch (e) { /* not up yet */ }
+  if (Date.now() - since > 5 * 60 * 1000) {
+    $('goneTitle').textContent = 'The update did not reopen PlaylistKit';
+    $('goneText').textContent = 'Close this window and open PlaylistKit from the Start menu or desktop.';
+    return;
+  }
+  setTimeout(() => waitForNewVersion(from, since), 1500);
+}
 function showUpdate(u) {
   UPD = u; $('verBtn').textContent = 'v' + u.current + (u.newer ? ' •' : '');
-  if (u.whats_new && u.whats_new.notes) { $('notesTitle').textContent = `What's new in ${u.whats_new.version}`; $('notesBody').textContent = u.whats_new.notes; $('notes').hidden = false; $('notes').dataset.seen = '1'; }
+  if (u.whats_new && u.whats_new.notes && !WN_SHOWN) { WN_SHOWN = true; $('notesTitle').textContent = `What's new in ${u.whats_new.version}`; $('notesBody').textContent = u.whats_new.notes; $('notes').hidden = false; $('notes').dataset.seen = '1'; }
   const p = u.progress || {};
   if (!u.newer || sessionStorage.getItem('pk-later') === u.latest) { $('updbar').hidden = !['downloading', 'verifying', 'restarting', 'error'].includes(p.phase); }
   else $('updbar').hidden = false;
@@ -575,8 +600,21 @@ function showUpdate(u) {
   if (p.phase === 'restarting') UPDATING = true;
   if (['downloading', 'verifying', 'restarting'].includes(p.phase)) setTimeout(async () => showUpdate(await api('/api/update')), 800);
 }
-async function checkUpdates(force) { const u = force ? await api('/api/update/check', {}) : await api('/api/update'); sessionStorage.removeItem('pk-later'); showUpdate(u);
+async function checkUpdates(force) {
+  const btn = $('updBtn'); btn.disabled = true; btn.textContent = '⟳ Checking…';
+  let u; try { u = force ? await api('/api/update/check', {}) : await api('/api/update'); } finally { btn.disabled = false; btn.textContent = '⟳ Check for updates'; }
+  sessionStorage.removeItem('pk-later'); showUpdate(u);
   if (force && !u.newer) { $('notesTitle').textContent = `PlaylistKit ${u.current}`; $('notesBody').textContent = u.error || 'You have the latest version.'; $('notes').hidden = false; } }
+function updNote(u) {
+  const when = u.checked_at ? new Date(u.checked_at * 1000).toLocaleString() : 'never';
+  $('sUpdNote').innerHTML = u.error ? esc(u.error)
+    : u.newer ? `PlaylistKit ${esc(u.latest)} is available (you have ${esc(u.current)}). <button class="btn small primary" onclick="$('settings').hidden=true;installUpdate()">${u.can_install ? 'Update now' : 'Download'}</button>`
+    : `You have the latest version (${esc(u.current)}). Last checked: ${esc(when)}.`;
+}
+async function checkUpdatesHere() {
+  $('sUpdNote').textContent = 'Checking GitHub…';
+  const u = await api('/api/update/check', {}); sessionStorage.removeItem('pk-later'); showUpdate(u); updNote(u);
+}
 function showNotes() { $('notesTitle').textContent = `What's new in ${UPD.latest}`; $('notesBody').textContent = UPD.notes || ''; $('notes').hidden = false; }
 async function closeNotes() { $('notes').hidden = true; if ($('notes').dataset.seen) { delete $('notes').dataset.seen; await api('/api/update/seen', {}); } }
 function hideUpdate() { sessionStorage.setItem('pk-later', UPD.latest); $('updbar').hidden = true; }

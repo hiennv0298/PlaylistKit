@@ -58,6 +58,34 @@ def test_check_reports_newer_release(tmp_path, monkeypatch):
     assert st["mode"] == "python" and not st["can_install"]  # tests run from source, not the installer build
 
 
+def test_cache_older_than_running_version_is_rechecked(tmp_path, monkeypatch):
+    # An older install cached "latest = 0.0.1" a moment ago; this version must ask GitHub again.
+    updates._save({"latest": "0.0.1", "checked_at": __import__("time").time(), "seen_version": __version__})
+    fake_release(tmp_path, monkeypatch, version="99.0.0")
+    updates.check()
+    assert updates.status()["latest"] == "99.0.0" and updates.status()["newer"]
+
+
+def test_fresh_cache_is_reused(tmp_path, monkeypatch):
+    updates._save({"latest": "99.0.0", "checked_at": __import__("time").time(), "seen_version": __version__})
+    monkeypatch.setattr(updates, "_get", lambda *a, **k: pytest.fail("must use the cache"))
+    updates.check()
+    assert updates.status()["latest"] == "99.0.0"
+
+
+def test_relaunch_port_is_taken_once(monkeypatch):
+    import time
+
+    from playlistkit import gui
+    from playlistkit.util import write_json
+
+    write_json(updates.app_home() / gui.RELAUNCH_FILE, {"port": 54321, "at": time.time()})
+    assert gui._take_relaunch() == 54321
+    assert gui._take_relaunch() is None  # used up
+    write_json(updates.app_home() / gui.RELAUNCH_FILE, {"port": 54321, "at": time.time() - 3600})
+    assert gui._take_relaunch() is None  # too old: a normal start
+
+
 def test_whats_new_after_update(tmp_path, monkeypatch):
     fake_release(tmp_path, monkeypatch, version=__version__, body="- New stuff")
     updates.check(force=True)
