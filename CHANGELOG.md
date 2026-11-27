@@ -3,6 +3,10 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.13
+
+- **Fixed: songs from ccMixter never downloaded** ("HTTP Error 403: Forbidden"). ccMixter refuses a file asked for without the song's page as the referrer; downloads now send it.
+
 ## 0.2.12
 
 - **Songs claimed by Content ID are marked as not monetizable.** Cutting claims on the Content ID tab saves them in the backlog as "Content ID: cannot be monetized".

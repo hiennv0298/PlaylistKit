@@ -22,8 +22,11 @@ def _next_index(folder: Path) -> int:
     return max(nums, default=0) + 1
 
 
-def _fetch(url: str, dest_stem: Path) -> Path:
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
+def _fetch(url: str, dest_stem: Path, page: str = "") -> Path:
+    headers = {"User-Agent": UA}
+    if page.startswith("http"):  # ccMixter refuses files asked for without the song's page as Referer (403)
+        headers["Referer"] = page
+    req = urllib.request.Request(url, headers=headers)
     tmp = dest_stem.with_suffix(".part")
     with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as out:  # noqa: S310
         ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
@@ -84,7 +87,7 @@ def download_selected(project: Project, cands: list[Candidate], backlog: Backlog
                     path = stem.with_name(stem.name + src.suffix.lower())
                     shutil.copy2(src, path)
             elif c.download:
-                path = _fetch(c.download, stem)
+                path = _fetch(c.download, stem, c.url)
             else:
                 path = _ytdlp(c.url, stem)
         except Cancelled:
