@@ -63,6 +63,31 @@ def test_pick_warns_and_never_ticks_claimed_songs(tmp_path):
     assert money["1"].skip == "claimed by Content ID before"
 
 
+def test_pick_holds_well_known_artists_and_covers(tmp_path):
+    bl = Backlog(tmp_path / "b.tsv")
+    g = genres.get("indie")
+    c = [Candidate("soundcloud", "1", "u", "Ngọt", "Vé đi thiên đường", 200, 266_000, safety="artist", fans=120_000),
+         Candidate("soundcloud", "2", "u", "TRANG", "Nắng", 200, 900, safety="artist", verified=True),
+         Candidate("soundcloud", "3", "u", "ACENS", "Tình thôi", 200, 52_000, safety="artist", fans=8_000),
+         Candidate("soundcloud", "4", "u", "th.", "Thế Thôi (cover)", 200, 300, safety="artist"),
+         Candidate("soundcloud", "5", "u", "TRANG", "Nắng | Sáng tác: TRANG x Ca sĩ: PKL", 200, 900, safety="artist"),
+         Candidate("soundcloud", "6", "u", "zux", "cho. ai?", 200, 122, safety="artist", fans=3)]
+    out = {x.sid: x for x in pick(c, genres.GENRES["vpop"], 6, bl, [])}  # indie and lofi skip covers outright
+    assert out["1"].hold and "120,000 followers" in out["1"].warn and not out["1"].selected
+    assert out["2"].hold and "verified" in out["2"].warn
+    assert not out["3"].hold and "fairly known" in out["3"].warn and out["3"].selected  # a warning only
+    assert out["4"].hold and "cover" in out["4"].warn
+    assert out["5"].hold
+    assert out["6"].selected and not out["6"].warn
+    reup = Candidate("soundcloud", "9", "u", "Madihu", "Có Khi", 200, 4_000, safety="unknown")
+    assert pick([reup], g, 1, bl, [])[0].hold
+    # a small artist ranks above a big one with many more plays
+    small = Candidate("soundcloud", "7", "u", "Small", "Bài nhỏ", 200, 20_000, safety="artist")
+    big = Candidate("soundcloud", "8", "u", "Big", "Bài to", 200, 5_000_000, safety="artist")
+    ranked = [x.sid for x in pick([big, small], g, 1, bl, []) if x.selected]
+    assert ranked == ["7"]
+
+
 def test_pick_one_per_artist_and_filters(tmp_path):
     bl = Backlog(tmp_path / "b.tsv")
     g = genres.get("indie")

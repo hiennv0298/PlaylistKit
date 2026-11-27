@@ -117,6 +117,8 @@ class Candidate:
     money: bool = False      # the licence allows a monetized remix (see licence())
     warn: str = ""           # what the backlog knows: used before, claimed by Content ID... (still allowed)
     hold: bool = False       # allowed but not ticked for you (claimed by Content ID before)
+    fans: int = 0            # the uploader's followers (SoundCloud)
+    verified: bool = False   # the uploader has a verified badge
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -176,7 +178,7 @@ class _SoundCloud:
         # a self-upload names its uploader in the title or has just the song name;
         # "Other Artist - Song" from someone else is a re-upload (Content ID risk)
         up = key(uploader)
-        generic = re.search(r"(music|hub|lyrics?|nhac|chill|official|records|playlist|tiktok|remix|vn|channel)", up)
+        generic = re.search(r"\b(music|hub|lyrics?|nhac|chill|official|records|playlist|tiktok|remix|vn|channel)\b", up)
         named = any(w in key(title).split() for w in up.split() if len(w) > 2) or (up and up.replace(" ", "") in key(title).replace(" ", ""))
         self_upload = bool(up) and not generic and (named or (" - " not in title and int(t.get("playback_count") or 0) < 2_000_000))
         if pm.get("artist") and key(pm["artist"]) not in (up, "") and up not in key(pm["artist"]):
@@ -192,7 +194,9 @@ class _SoundCloud:
                 artist, title = [x.strip() for x in title.split(" - ", 1)]
         return Candidate("soundcloud", str(t["id"]), t["permalink_url"], artist, title,
                          (t.get("duration") or 0) / 1000, int(t.get("playback_count") or 0),
-                         license=t.get("license") or "", safety=safety, flags=flags, genre=t.get("genre") or "")
+                         license=t.get("license") or "", safety=safety, flags=flags, genre=t.get("genre") or "",
+                         fans=int((t.get("user") or {}).get("followers_count") or 0),
+                         verified=bool((t.get("user") or {}).get("verified")))
 
     def search(self, query: str, limit: int, money_only: bool = False) -> list[Candidate]:
         out: list[Candidate] = []
@@ -485,6 +489,26 @@ def search(genre: Genre, sources: list[str], want: int, settings: dict, extra: s
 _NOT_THEIRS = re.compile(r"\b(remix|rmx|cover|bootleg|flip|mashup|edit|rework|vip mix|nightcore|sped up|slowed)\b", re.I)
 
 
+# songs Content ID knows: a well-known artist is almost always registered with a label or distributor,
+# and a cover is claimed by whoever wrote the song (melody / lyrics claims)
+BIG_FANS, BIG_PLAYS = 50_000, 200_000
+KNOWN_FANS, KNOWN_PLAYS = 5_000, 50_000
+_COVER = re.compile(r"\b(cover|covered by|written by|original by|ost)\b|\b(ca sĩ|sáng tác|st|composer)\s*:", re.I)
+
+
+def fame(c: Candidate) -> tuple[int, str]:
+    """(2 well-known / 1 fairly known / 0 small, why). Small artists are the ones Content ID rarely knows."""
+    if c.source == "local":
+        return 0, ""
+    if c.verified or c.fans >= BIG_FANS or c.plays >= BIG_PLAYS:
+        why = "verified artist" if c.verified else (f"{c.fans:,} followers" if c.fans >= BIG_FANS else f"{c.plays:,} plays")
+        return 2, f"well-known ({why}): Content ID likely"
+    if c.fans >= KNOWN_FANS or c.plays >= KNOWN_PLAYS:
+        why = f"{c.fans:,} followers" if c.fans >= KNOWN_FANS else f"{c.plays:,} plays"
+        return 1, f"fairly known ({why}): may be claimed"
+    return 0, ""
+
+
 def money_skip(c: Candidate) -> str:
     """Why a song cannot go into a monetized remix ('' when it can). Your own files are your call."""
     if c.source == "local":
@@ -527,6 +551,7 @@ def pick(cands: list[Candidate], genre: Genre, want: int, backlog: Backlog, bann
             continue
         seen_ids.add(uid)
         t = key(f"{c.title}")
+        claimed_before = False
         text = key(f"{c.artist} {c.title} {c.genre}")
         if c.source != "local" and c.duration and not genre.min_sec <= c.duration <= genre.max_sec:
             c.skip = f"length {int(c.duration // 60)}:{int(c.duration % 60):02d}"
@@ -538,11 +563,21 @@ def pick(cands: list[Candidate], genre: Genre, want: int, backlog: Backlog, bann
             c.skip = f"not {genre.name}"
         else:  # the backlog warns about songs and artists used or claimed before; only removed songs are skipped
             c.skip, c.warn, c.hold = backlog.review(c.artist, c.title, allow_used_artists, banned_set)
+            claimed_before = c.hold
+            level, why = fame(c)
+            if c.source == "soundcloud" and c.safety == "unknown" and not level:
+                level, why = 2, "uploaded by someone else (re-upload?): its owner can claim it"
+            if c.source != "local" and _COVER.search(f"{c.artist} {c.title}"):
+                level, why = 2, "someone else wrote this song (cover): its writer can claim it"
+            if level:
+                c.warn = "; ".join(w for w in (c.warn, why) if w)
+                c.hold = c.hold or level == 2
         if not c.skip and c.safety == "distributed" and not allow_distributed and genre.risk != "high":
             c.skip = "distributed release (Content ID likely)"
         if not c.skip and money_only:
-            c.skip = money_skip(c) or ("claimed by Content ID before" if c.hold else "")
-        c.score = SAFETY_SCORE.get(c.safety, 1.0) + min(math.log10(c.plays + 10), 6.0) / 2
+            c.skip = money_skip(c) or ("claimed by Content ID before" if claimed_before else "")
+        # some plays show people like it; past ~20k more plays only means Content ID is more likely to know it
+        c.score = SAFETY_SCORE.get(c.safety, 1.0) + min(math.log10(c.plays + 10), 4.3) / 2
         if c.warn:  # new songs come first; a song with a warning fills the playlist only when needed
             c.score -= 4.0 if c.hold else 1.5
         prev = best_by_title.get(t)

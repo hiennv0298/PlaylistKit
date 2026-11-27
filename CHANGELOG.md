@@ -3,6 +3,16 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.14
+
+- **Searches favour small artists.** Content ID mostly claims songs by artists who are already known, so known artists are warned about and not ticked for you:
+  - A verified artist, an artist with 50,000+ followers, or a song with 200,000+ plays shows "well-known …: Content ID likely". These songs are not ticked.
+  - An artist with 5,000+ followers, or a song with 50,000+ plays, shows "fairly known …: may be claimed". These songs are ticked only when there are not enough others.
+  - A cover, or a song whose title names another writer or singer ("Sáng tác: …", "Ca sĩ: …"), shows "someone else wrote this song (cover)" and is not ticked. Content ID claims the melody and lyrics for the writer.
+  - A SoundCloud song that looks uploaded by someone other than its artist shows "uploaded by someone else (re-upload?)" and is not ticked.
+  - More plays no longer push a song up the list past about 20,000.
+- **Fixed: re-upload channels on SoundCloud were not recognised.** Names such as "… Music" or "Lyrics …" are now treated as re-uploads again.
+
 ## 0.2.13
 
 - **Fixed: songs from ccMixter never downloaded** ("HTTP Error 403: Forbidden"). ccMixter refuses a file asked for without the song's page as the referrer; downloads now send it.
