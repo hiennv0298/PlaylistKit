@@ -367,6 +367,11 @@ def job_cut(pid: str, text: str) -> dict:
     from playlistkit import cut, meta
 
     p = get_project(pid)
+    songs = cut.remember_claim_songs(p.id, text, backlog())
+    if songs:
+        log(f"Saved {len(songs)} claimed songs in the backlog: " + "; ".join(f"{a} - {t}" if a else t for a, t in songs))
+    if not cut.parse_claims(text) and songs:  # only the claim list (cut in Studio already): nothing to cut here
+        return {"removed": [], "songs_saved": len(songs)}
     tracks, duration = cut.current_tracks(p)
     plan = cut.plan_cut(tracks, duration, cut.parse_claims(text))
     STATE.set(0.1, "Cutting the mix")
@@ -819,8 +824,12 @@ class Handler(BaseHTTPRequestHandler):
             from playlistkit import cut
 
             p = get_project(pid)
+            text = str(body.get("text") or "")
+            songs = [{"artist": a, "title": t} for a, t in cut.parse_claim_songs(text)]
+            if not cut.parse_claims(text) and songs:
+                return {"claimed": [], "songs": songs}
             tracks, duration = cut.current_tracks(p)
-            return cut.plan_cut(tracks, duration, cut.parse_claims(str(body.get("text") or ""))).to_dict()
+            return {**cut.plan_cut(tracks, duration, cut.parse_claims(text)).to_dict(), "songs": songs}
         if path == "/api/cut/apply":
             get_project(pid)
             start_job("cutting", "Cutting claimed songs", pid, job_cut, pid, str(body.get("text") or ""))

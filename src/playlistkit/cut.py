@@ -53,6 +53,59 @@ def parse_claims(text: str) -> list[tuple[float, float]]:
     return sorted(out)
 
 
+# the claim list in YouTube Studio, copied as text: each claim is its song name (and artist, when Studio
+# knows it) right above a "Copyright" / "Bản quyền" line
+_CLAIM_KIND = re.compile(r"^(bản quyền|copyright)$", re.I)
+_CLAIM_NOISE = re.compile(
+    r"^(loại|type|thông báo xác nhận quyền sở hữu|copyright claims?|claims?|xem chi tiết|see details|"
+    r"chọn cách giải quyết|select action|choose how to resolve|take action|không ảnh hưởng đến video\.?|"
+    r"no impact on video\.?|giai điệu.*|melody.*|âm thanh|audio|hình ảnh|visual|video của bạn|your video|"
+    r"video:.*|tổng quan.*|.*\d:\d\d.*)$", re.I)
+_CLAIM_NAMED = re.compile(r"(?:nội dung bị xác nhận quyền sở hữu|claimed content|content used)\s*:\s*(.+)", re.I)
+
+
+def parse_claim_songs(text: str) -> list[tuple[str, str]]:
+    """(artist, title) of the songs Content ID names in text pasted from Studio ('' when it names no artist).
+    The time ranges in the same text are read by parse_claims()."""
+    out: list[tuple[str, str]] = []
+    block: list[str] = []
+
+    def add(artist: str, title: str) -> None:
+        if not artist and " - " in title:
+            artist, title = [x.strip() for x in title.split(" - ", 1)]
+        if title and (artist, title) not in out:
+            out.append((artist, title))
+
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        named = _CLAIM_NAMED.match(line)
+        if named:
+            add("", named.group(1).strip())
+            block = []
+        elif _CLAIM_KIND.match(line):
+            if block:
+                add(block[-1] if len(block) > 1 else "", block[-2] if len(block) > 1 else block[-1])
+            block = []
+        elif _CLAIM_NOISE.match(line) or RANGE.search(line):
+            block = []
+        else:
+            block.append(line)
+    return out
+
+
+def remember_claim_songs(project_id: str, text: str, backlog: Backlog) -> list[tuple[str, str]]:
+    """Save the songs Content ID named as claimed, so a later search warns about any upload of them:
+    a cover or a re-upload under another name or artist is claimed for the same song."""
+    known = backlog.claimed_titles()
+    songs = [(a, t) for a, t in parse_claim_songs(text) if key(t) and key(t) not in known]
+    if songs:
+        backlog.mark_many(project_id, [(a or "?", t) for a, t in songs], "claimed",
+                          "Content ID: the claimed song, any upload of it can be claimed")
+    return songs
+
+
 def plan_cut(tracks: list[tuple[float, str]], duration: float, claims: list[tuple[float, float]]) -> Plan:
     if not claims:
         raise PlaylistKitError("No time ranges found. Paste ranges like 47:48 — 51:52.")

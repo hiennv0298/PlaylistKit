@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "playlistkit"
-version = "0.2.14"
+version = "0.2.15"
 description = "Find songs by genre, remix them into one seamless playlist, and make the YouTube video, title, description and tags."
 readme = "README.md"
 requires-python = ">=3.10"

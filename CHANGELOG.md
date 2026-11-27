@@ -3,6 +3,13 @@
 Each release's section becomes its notes on the GitHub Releases page and in the app's "What's new" window.
 Add a `## <version>` section here before pushing a `v<version>` tag.
 
+## 0.2.15
+
+- **The Content ID tab remembers the songs that were claimed, by their real names.** Paste the claim list from YouTube Studio along with the times: the song names above "Copyright" (and the artist, when Studio shows one) are saved in the backlog as claimed.
+  - A later search warns about any upload of those songs, under any uploader, and does not tick them. That covers covers and re-uploads whose titles never said "cover", for example someone's "Cuối chiều (cover)" after "Cuối Chiều" was claimed.
+  - Songs by an artist Content ID named are held too.
+  - Pasting only the claim list, for a video already cut in YouTube Studio, saves the songs without cutting anything ("Save to the backlog").
+
 ## 0.2.14
 
 - **Searches favour small artists.** Content ID mostly claims songs by artists who are already known, so known artists are warned about and not ticked for you:

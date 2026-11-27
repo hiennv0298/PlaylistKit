@@ -152,3 +152,50 @@ def test_video_cmd():
     assert "scale=854:480" in s and "-tune stillimage" in s and "-t 100.000" in s and "aac" in s
     with pytest.raises(Exception):
         video.build_cmd(Path("ffmpeg"), Path("t.png"), Path("a.wav"), Path("o.mp4"), "4k", 1)
+
+
+STUDIO_CLAIMS = """Video: indie 1 edit 720p
+Tổng quan về thông báo xác nhận quyền sở hữu
+1:17:16
+Video của bạn
+indie 1 edit 720p
+Thông báo xác nhận quyền sở hữu
+Loại
+Nghe Em
+Bản quyền
+Giai điệu hoặc lời bài hát
+Không ảnh hưởng đến video.
+Xem chi tiết
+Chọn cách giải quyết
+dear life
+festo
+Bản quyền
+Âm thanh
+Không ảnh hưởng đến video.
+Xem chi tiết
+Chọn cách giải quyết
+EMVN - Tôi Và Em
+Bản quyền
+Giai điệu hoặc lời bài hát
+Nội dung bị xác nhận quyền sở hữu: Cuối Chiều
+8:10 — 9:19
+"""
+
+
+def test_claim_list_names_the_songs():
+    assert cut.parse_claim_songs(STUDIO_CLAIMS) == [("", "Nghe Em"), ("festo", "dear life"), ("EMVN", "Tôi Và Em"),
+                                                    ("", "Cuối Chiều")]
+    assert cut.parse_claims(STUDIO_CLAIMS) == [(490.0, 559.0)]
+
+
+def test_claimed_songs_warn_about_any_upload_of_them(tmp_path):
+    bl = Backlog(tmp_path / "b.tsv")
+    saved = cut.remember_claim_songs("indie-1", STUDIO_CLAIMS, bl)
+    assert len(saved) == 4
+    assert cut.remember_claim_songs("indie-1", STUDIO_CLAIMS, bl) == []  # saved once
+    # a cover by someone else, under the claimed song's name, is held
+    skip, warn, hold = bl.review("Someone", "Cuối Chiều (acoustic)")
+    assert not skip and hold and "Content ID" in warn
+    # the artist Content ID named is held too
+    assert bl.review("festo", "new song")[2]
+    assert not bl.review("Someone", "Bài mới")[2]
